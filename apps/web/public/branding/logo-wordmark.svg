@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="260" viewBox="0 0 980 260" fill="none">
+  <defs>
+    <linearGradient id="wordBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0E7665"/>
+      <stop offset="100%" stop-color="#084E45"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="980" height="260" rx="36" fill="#F4F2E7"/>
+  <rect x="32" y="32" width="196" height="196" rx="42" fill="url(#wordBg)"/>
+  <rect x="71" y="72" width="97" height="116" rx="13" fill="#F8FFFB"/>
+  <circle cx="160" cy="168" r="30" fill="#F97316"/>
+  <rect x="154" y="153" width="11" height="24" rx="4" fill="#FFF8EB"/>
+  <rect x="154" y="181" width="11" height="11" rx="5.5" fill="#FFF8EB"/>
+  <text x="264" y="116" fill="#0F172A" font-size="54" font-family="Sora, Segoe UI, Arial, sans-serif" font-weight="700">Issue Prompt</text>
+  <text x="264" y="178" fill="#0E7665" font-size="54" font-family="Sora, Segoe UI, Arial, sans-serif" font-weight="700">Tracker</text>
+  <text x="266" y="213" fill="#4B5563" font-size="23" font-family="Sora, Segoe UI, Arial, sans-serif" font-weight="500">Capture issues and ideas. Export clean AI prompts.</text>
+</svg>

@@ -24,6 +24,8 @@ Issue Prompt Tracker is a responsive web app + API for capturing project-specifi
 - Mobile-first navigation:
   - desktop sidebar nav
   - bottom tab nav on small screens
+- PWA-enabled build (manifest + service worker via `vite-plugin-pwa`)
+- Branding assets served from `apps/web/public/branding`
 
 ## Backend Auth + Access Control
 - JWT auth endpoints:
@@ -81,3 +83,7 @@ When making changes, append an entry to **Change Log** below with:
 - Normalized `docker-compose.yml` environment placeholders to sane defaults (`:-`) for smoother local/Coolify setup.
 - Added Postgres variables to `.env.example` (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST_PORT`).
 - Expanded Coolify deployment docs in `README.md` with explicit Postgres + API env variable examples and required persistent volume mounts.
+- Added baseline PWA support to web app (manifest, service worker registration, offline-ready shell).
+- Generated and committed branded icon/image assets (`favicon`, apple icon, PWA icons, manifest screenshots).
+- Added reusable asset generator script `npm run assets:generate -w apps/web`.
+- Integrated brand mark logo into auth and app shell UI.

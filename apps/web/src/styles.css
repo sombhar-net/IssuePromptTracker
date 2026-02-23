@@ -148,6 +148,45 @@ button.danger {
   box-shadow: var(--shadow-soft);
 }
 
+.auth-head {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.logo-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.brand-mark {
+  width: 2.9rem;
+  height: 2.9rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(8, 78, 69, 0.22);
+  background: #f4f2e7;
+  box-shadow: 0 8px 18px rgba(12, 68, 58, 0.16);
+  flex-shrink: 0;
+}
+
+.brand-mark.brand-mark-lg {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1rem;
+}
+
+.brand-copy {
+  min-width: 0;
+}
+
+.brand-copy h1 {
+  margin: 0.32rem 0;
+}
+
+.brand-copy .kicker {
+  margin: 0;
+}
+
 .auth-card h1 {
   margin: 0.35rem 0;
   font-size: clamp(1.3rem, 4vw, 2.1rem);
@@ -211,6 +250,10 @@ button.danger {
 .brand p {
   margin: 0;
   color: var(--muted);
+}
+
+.brand .logo-lockup {
+  align-items: flex-start;
 }
 
 .side-nav {
@@ -546,6 +589,18 @@ button.danger {
 
   .topbar {
     padding: 0.7rem;
+  }
+
+  .brand-mark {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+  }
+
+  .brand-mark.brand-mark-lg {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.85rem;
   }
 
   .route-host {

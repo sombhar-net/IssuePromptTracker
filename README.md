@@ -6,6 +6,7 @@ A mobile-friendly and web-ready app to capture issues/features with screenshots,
 - Tracks multiple projects
 - Uses global editable categories (issue/feature/other)
 - Includes authentication with roles (`USER`, `ADMIN`)
+- Works as an installable PWA (desktop/mobile home screen)
 - Provides dedicated responsive pages:
   - `Projects`: CRUD + active project selection
   - `Categories`: CRUD for global category list
@@ -17,10 +18,18 @@ A mobile-friendly and web-ready app to capture issues/features with screenshots,
 
 ## Stack
 - Frontend: React + Vite (responsive for mobile web + desktop)
+- PWA: `vite-plugin-pwa` (manifest + service worker)
 - Backend: Fastify + Prisma
 - Database: PostgreSQL
 - File storage: local persistent volume for screenshots
 - Deployment: Docker Compose (Coolify-ready)
+
+## Branding assets
+- Generated files live in `apps/web/public/branding`.
+- Regenerate icon/logo/screenshot assets:
+```bash
+npm run assets:generate -w apps/web
+```
 
 ## Local setup
 If Docker daemon access is blocked for your user, run:

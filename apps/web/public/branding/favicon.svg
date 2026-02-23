@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0E7665"/>
+      <stop offset="100%" stop-color="#084E45"/>
+    </linearGradient>
+    <radialGradient id="spot" cx="0.18" cy="0.15" r="0.88">
+      <stop offset="0%" stop-color="#FCD34D" stop-opacity="0.76"/>
+      <stop offset="100%" stop-color="#FCD34D" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="#F4F2E7"/>
+  <rect x="3" y="3" width="58" height="58" rx="13" fill="url(#bg)"/>
+  <rect x="3" y="3" width="58" height="58" rx="13" fill="url(#spot)"/>
+
+  <rect x="14.600000000000001" y="14.600000000000001" width="30.16" height="35.96" rx="4.930000000000001" fill="#F8FFFB"/>
+  <path d="M 38.96 14.600000000000001 L 44.76 20.4 L 38.96 20.4 Z" fill="#D6EFEA"/>
+
+  <rect x="18.08" y="22.14" width="17.98" height="2.9000000000000004" rx="1.16" fill="#0A6054" opacity="0.45"/>
+  <rect x="18.08" y="27.94" width="13.92" height="2.9000000000000004" rx="1.16" fill="#0A6054" opacity="0.35"/>
+
+  <circle cx="41.86" cy="41.28" r="8.7" fill="#F97316"/>
+  <rect x="40.294000000000004" y="37.22" width="3.19" height="6.96" rx="1.276" fill="#FFF8EB"/>
+  <rect x="40.294000000000004" y="45.92" width="3.19" height="3.19" rx="1.566" fill="#FFF8EB"/>
+
+  <path d="M 46.5 16.92 L 48.82 22.14 L 54.62 22.720000000000002 L 49.980000000000004 26.200000000000003 L 51.14 32 L 46.5 29.1 L 41.86 32 L 43.019999999999996 26.200000000000003 L 38.38 22.720000000000002 L 44.18 22.14 Z" fill="#FCD34D"/>
+</svg>

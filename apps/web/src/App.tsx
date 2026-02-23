@@ -96,6 +96,12 @@ function persistProjectId(projectId: string): void {
   window.localStorage.setItem(SELECTED_PROJECT_STORAGE_KEY, projectId);
 }
 
+function BrandMark(props: { className?: string; alt?: string }): JSX.Element {
+  const { className = "brand-mark", alt = "Issue Prompt Tracker logo" } = props;
+
+  return <img alt={alt} className={className} src="/branding/logo-mark.svg" />;
+}
+
 interface AuthScreenProps {
   busy: boolean;
   authMode: AuthMode;
@@ -131,9 +137,14 @@ function AuthScreen(props: AuthScreenProps): JSX.Element {
     <main className="auth-page">
       <div className="glow" />
       <section className="auth-card">
-        <header>
-          <p className="kicker">Issue Prompt Tracker</p>
-          <h1>Capture what breaks, ship what works</h1>
+        <header className="auth-head">
+          <div className="logo-lockup">
+            <BrandMark className="brand-mark brand-mark-lg" />
+            <div className="brand-copy">
+              <p className="kicker">Issue Prompt Tracker</p>
+              <h1>Capture what breaks, ship what works</h1>
+            </div>
+          </div>
           <p>Sign in to manage projects, issues, screenshots, and AI prompt exports.</p>
         </header>
 
@@ -1176,8 +1187,13 @@ function AppShell(props: ShellProps): JSX.Element {
     <div className="shell-wrap">
       <aside className="sidebar">
         <div className="brand">
-          <p className="kicker">AAM Tracker</p>
-          <h1>Issue Prompt Lab</h1>
+          <div className="logo-lockup">
+            <BrandMark />
+            <div className="brand-copy">
+              <p className="kicker">AAM Tracker</p>
+              <h1>Issue Prompt Lab</h1>
+            </div>
+          </div>
           <p>Capture bugs and ideas fast, then export clean AI-ready prompts.</p>
         </div>
 
@@ -1464,7 +1480,10 @@ export default function App(): JSX.Element {
     return (
       <main className="auth-page">
         <div className="auth-card">
-          <h1>Checking session...</h1>
+          <div className="logo-lockup">
+            <BrandMark className="brand-mark brand-mark-lg" />
+            <h1>Checking session...</h1>
+          </div>
         </div>
       </main>
     );
