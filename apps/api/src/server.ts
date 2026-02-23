@@ -14,10 +14,15 @@ import yaml from "js-yaml";
 import { PrismaClient, type Prisma, type UserRole } from "@prisma/client";
 import { z, ZodError } from "zod";
 import {
+  DEFAULT_PROMPT_TEMPLATES,
+  PROMPT_TEMPLATE_KINDS,
+  PROMPT_TEMPLATE_PLACEHOLDERS,
   buildItemYamlRecord,
   buildProjectYamlDocument,
   buildPromptText,
-  type PromptItemInput
+  resolvePromptTemplateKind,
+  type PromptItemInput,
+  type PromptTemplateKind
 } from "@aam/shared";
 import { env } from "./env.js";
 
@@ -49,6 +54,18 @@ const itemTypeSchema = z.enum(["issue", "feature"]);
 const itemStatusSchema = z.enum(["open", "in_progress", "resolved", "archived"]);
 const itemPrioritySchema = z.enum(["low", "medium", "high", "critical"]);
 const categoryKindSchema = z.enum(["issue", "feature", "other"]);
+const promptTemplateTextSchema = z
+  .string()
+  .max(20000)
+  .transform((value) => value.replace(/\r\n/g, "\n"))
+  .refine((value) => value.trim().length > 0, {
+    message: "Template cannot be empty"
+  });
+const promptTemplateSetSchema = z.object({
+  issue: promptTemplateTextSchema,
+  feature: promptTemplateTextSchema,
+  other: promptTemplateTextSchema
+});
 const userRoleSchema = z.enum(["ADMIN", "USER"]);
 
 const authTokenPayloadSchema = z.object({
@@ -167,6 +184,30 @@ function itemAccessWhere(user: AuthUser): Prisma.ItemWhereInput {
   return { project: { ownerId: user.id } };
 }
 
+function buildPromptTemplateSet(
+  rows: Array<{ kind: PromptTemplateKind; template: string }>
+): Record<PromptTemplateKind, string> {
+  const templates: Record<PromptTemplateKind, string> = { ...DEFAULT_PROMPT_TEMPLATES };
+
+  for (const row of rows) {
+    templates[row.kind] = row.template;
+  }
+
+  return templates;
+}
+
+async function getProjectPromptTemplateSet(projectId: string): Promise<Record<PromptTemplateKind, string>> {
+  const templates = await prisma.promptTemplate.findMany({
+    where: { projectId },
+    select: {
+      kind: true,
+      template: true
+    }
+  });
+
+  return buildPromptTemplateSet(templates);
+}
+
 async function ensureProjectAccess(projectId: string, user: AuthUser): Promise<{ id: string; ownerId: string | null; name: string }> {
   const project = await prisma.project.findFirst({
     where: {
@@ -198,13 +239,14 @@ function toPromptInput(item: {
   createdAt: Date;
   updatedAt: Date;
   project: { name: string };
-  category: { name: string } | null;
+  category: { name: string; kind: "issue" | "feature" | "other" } | null;
   images: Array<{ relativePath: string; filename: string }>;
 }): PromptItemInput {
   return {
     id: item.id,
     projectName: item.project.name,
     categoryName: item.category?.name ?? null,
+    categoryKind: item.category?.kind ?? null,
     type: item.type,
     title: item.title,
     description: item.description,
@@ -1029,6 +1071,68 @@ app.patch("/api/items/:id/images/reorder", async (request, reply) => {
   return reply.status(204).send();
 });
 
+app.get("/api/prompt-templates/:projectId", async (request, reply) => {
+  const authUser = getAuthUser(request);
+  const params = z.object({ projectId: z.string().min(1) }).parse(request.params);
+
+  try {
+    await ensureProjectAccess(params.projectId, authUser);
+  } catch {
+    return reply.status(404).send({ message: "Project not found" });
+  }
+
+  const templates = await getProjectPromptTemplateSet(params.projectId);
+
+  return {
+    projectId: params.projectId,
+    templates,
+    defaults: DEFAULT_PROMPT_TEMPLATES,
+    placeholders: PROMPT_TEMPLATE_PLACEHOLDERS
+  };
+});
+
+app.put("/api/prompt-templates/:projectId", async (request, reply) => {
+  const authUser = getAuthUser(request);
+  const params = z.object({ projectId: z.string().min(1) }).parse(request.params);
+  const body = z
+    .object({
+      templates: promptTemplateSetSchema
+    })
+    .parse(request.body);
+
+  try {
+    await ensureProjectAccess(params.projectId, authUser);
+  } catch {
+    return reply.status(404).send({ message: "Project not found" });
+  }
+
+  await prisma.$transaction(
+    PROMPT_TEMPLATE_KINDS.map((kind) =>
+      prisma.promptTemplate.upsert({
+        where: {
+          projectId_kind: {
+            projectId: params.projectId,
+            kind
+          }
+        },
+        update: {
+          template: body.templates[kind]
+        },
+        create: {
+          projectId: params.projectId,
+          kind,
+          template: body.templates[kind]
+        }
+      })
+    )
+  );
+
+  return reply.send({
+    projectId: params.projectId,
+    templates: body.templates
+  });
+});
+
 app.post("/api/prompts/item/:id", async (request, reply) => {
   const authUser = getAuthUser(request);
   const params = z.object({ id: z.string().min(1) }).parse(request.params);
@@ -1052,8 +1156,25 @@ app.post("/api/prompts/item/:id", async (request, reply) => {
   }
 
   const promptInput = toPromptInput(item);
-  const text = buildPromptText(promptInput);
-  const yamlRecord = buildItemYamlRecord(promptInput);
+  const templateKind = resolvePromptTemplateKind(promptInput);
+  const template = await prisma.promptTemplate.findUnique({
+    where: {
+      projectId_kind: {
+        projectId: item.projectId,
+        kind: templateKind
+      }
+    },
+    select: {
+      template: true
+    }
+  });
+
+  const text = buildPromptText(promptInput, template?.template);
+  const yamlRecord = buildItemYamlRecord(promptInput, {
+    templateKind,
+    template: template?.template,
+    promptText: text
+  });
 
   return {
     text,
@@ -1097,7 +1218,19 @@ app.post("/api/prompts/project/:projectId", async (request, reply) => {
     orderBy: { updatedAt: "desc" }
   });
 
-  const yamlItems = items.map((item) => buildItemYamlRecord(toPromptInput(item)));
+  const projectTemplates = await getProjectPromptTemplateSet(project.id);
+  const yamlItems = items.map((item) => {
+    const promptInput = toPromptInput(item);
+    const templateKind = resolvePromptTemplateKind(promptInput);
+    const template = projectTemplates[templateKind];
+    const promptText = buildPromptText(promptInput, template);
+
+    return buildItemYamlRecord(promptInput, {
+      templateKind,
+      template,
+      promptText
+    });
+  });
 
   return {
     yaml: buildProjectYamlDocument({
@@ -1133,7 +1266,24 @@ app.get("/api/exports/item/:id.zip", async (request, reply) => {
 
   const warnings: string[] = [];
   const promptInput = toPromptInput(item);
-  const yamlRecord = buildItemYamlRecord(promptInput);
+  const templateKind = resolvePromptTemplateKind(promptInput);
+  const template = await prisma.promptTemplate.findUnique({
+    where: {
+      projectId_kind: {
+        projectId: item.projectId,
+        kind: templateKind
+      }
+    },
+    select: {
+      template: true
+    }
+  });
+  const promptText = buildPromptText(promptInput, template?.template);
+  const yamlRecord = buildItemYamlRecord(promptInput, {
+    templateKind,
+    template: template?.template,
+    promptText
+  });
 
   const payload = {
     version: 1,
@@ -1217,7 +1367,19 @@ app.get("/api/exports/project/:projectId.zip", async (request, reply) => {
   });
 
   const warnings: string[] = [];
-  const yamlItems = items.map((item) => buildItemYamlRecord(toPromptInput(item)));
+  const projectTemplates = await getProjectPromptTemplateSet(project.id);
+  const yamlItems = items.map((item) => {
+    const promptInput = toPromptInput(item);
+    const templateKind = resolvePromptTemplateKind(promptInput);
+    const template = projectTemplates[templateKind];
+    const promptText = buildPromptText(promptInput, template);
+
+    return buildItemYamlRecord(promptInput, {
+      templateKind,
+      template,
+      promptText
+    });
+  });
 
   const payload = buildProjectYamlDocument({
     projectName: project.name,

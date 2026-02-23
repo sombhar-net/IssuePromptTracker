@@ -12,6 +12,7 @@ A mobile-friendly and web-ready app to capture issues/features with screenshots,
   - `Categories`: list page + separate create/update pages
   - `Issues`: list page + separate create/update pages with multi-screenshot attachments
   - `Prompts`: filter, copy prompt, and download YAML + images bundles
+  - `Prompt Templates`: edit project prompt templates for `issue` / `feature` / `other`
 - Exports prompt bundles as zip files:
   - Single item: `prompt.yaml` + `images/*`
   - Whole project: `prompts.yaml` + `images/*`
@@ -125,6 +126,7 @@ Important:
 - `/api/items/:id/images` upload/delete/reorder
 - `/api/prompts/item/:id`
 - `/api/prompts/project/:projectId`
+- `/api/prompt-templates/:projectId` (GET/PUT)
 - `/api/exports/item/:id.zip`
 - `/api/exports/project/:projectId.zip`
 - `/uploads/*` static screenshots
@@ -132,4 +134,4 @@ Important:
 ## Notes
 - Non-admin users only see their own projects/items
 - Admin users can see and manage all projects/items across users
-- Prompts use a structured debugging template by default
+- Prompt templates are editable per project for `issue` / `feature` / `other` with default fallback

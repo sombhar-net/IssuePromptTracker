@@ -2,6 +2,7 @@ export type ItemType = "issue" | "feature";
 export type ItemStatus = "open" | "in_progress" | "resolved" | "archived";
 export type ItemPriority = "low" | "medium" | "high" | "critical";
 export type CategoryKind = "issue" | "feature" | "other";
+export type PromptTemplateKind = CategoryKind;
 export type UserRole = "ADMIN" | "USER";
 
 export interface AuthUser {
@@ -90,4 +91,22 @@ export interface ItemFilters {
 export interface PromptResponse {
   text: string;
   yaml: Record<string, unknown>;
+}
+
+export interface PromptTemplateSet {
+  issue: string;
+  feature: string;
+  other: string;
+}
+
+export interface PromptTemplatePlaceholder {
+  token: string;
+  description: string;
+}
+
+export interface PromptTemplatesResponse {
+  projectId: string;
+  templates: PromptTemplateSet;
+  defaults: PromptTemplateSet;
+  placeholders: PromptTemplatePlaceholder[];
 }

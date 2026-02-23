@@ -8,7 +8,16 @@ import {
   useRef,
   useState
 } from "react";
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams
+} from "react-router-dom";
 import {
   ApiError,
   clearAuthToken,
@@ -26,11 +35,13 @@ import {
   getCategories,
   getItems,
   getMe,
+  getPromptTemplates,
   getProjects,
   login as loginUser,
   register as registerUser,
   updateCategory,
   updateItem,
+  updatePromptTemplates,
   updateProject,
   uploadItemImages
 } from "./api";
@@ -45,6 +56,9 @@ import type {
   ItemPriority,
   ItemStatus,
   ItemType,
+  PromptTemplateKind,
+  PromptTemplatePlaceholder,
+  PromptTemplateSet,
   Project
 } from "./types";
 
@@ -60,6 +74,12 @@ const ITEM_TYPES: ItemType[] = ["issue", "feature"];
 const ITEM_STATUSES: ItemStatus[] = ["open", "in_progress", "resolved", "archived"];
 const ITEM_PRIORITIES: ItemPriority[] = ["low", "medium", "high", "critical"];
 const CATEGORY_KINDS: CategoryKind[] = ["issue", "feature", "other"];
+const PROMPT_TEMPLATE_KINDS: PromptTemplateKind[] = ["issue", "feature", "other"];
+const EMPTY_PROMPT_TEMPLATES: PromptTemplateSet = {
+  issue: "",
+  feature: "",
+  other: ""
+};
 const ITEM_FORM_FIELDS: ItemFormField[] = [
   "type",
   "categoryId",
@@ -163,6 +183,178 @@ function BrandMark(props: { className?: string; alt?: string }): JSX.Element {
   return <img alt={alt} className={className} src="/branding/logo-mark.svg" />;
 }
 
+type AppIconName =
+  | "menu"
+  | "close"
+  | "plus"
+  | "edit"
+  | "trash"
+  | "eye"
+  | "logout"
+  | "back"
+  | "save"
+  | "cancel"
+  | "copy"
+  | "download"
+  | "folder"
+  | "refresh"
+  | "reset";
+
+function AppIcon(props: { name: AppIconName; className?: string }): JSX.Element {
+  const { name, className = "btn-icon" } = props;
+
+  const sharedProps = {
+    className,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg",
+    "aria-hidden": true
+  } as const;
+
+  switch (name) {
+    case "menu":
+      return (
+        <svg {...sharedProps}>
+          <path d="M4 7H20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M4 12H20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M4 17H20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        </svg>
+      );
+    case "close":
+      return (
+        <svg {...sharedProps}>
+          <path d="M6 6L18 18" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M18 6L6 18" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        </svg>
+      );
+    case "plus":
+      return (
+        <svg {...sharedProps}>
+          <path d="M12 5V19" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M5 12H19" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        </svg>
+      );
+    case "edit":
+      return (
+        <svg {...sharedProps}>
+          <path d="M4 20H20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path
+            d="M14.5 5.5L18.5 9.5L9 19H5V15L14.5 5.5Z"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
+        </svg>
+      );
+    case "trash":
+      return (
+        <svg {...sharedProps}>
+          <path d="M5 7H19" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M9 7V5H15V7" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M7 7L8 19H16L17 7" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+        </svg>
+      );
+    case "eye":
+      return (
+        <svg {...sharedProps}>
+          <path
+            d="M2.5 12C4.2 8.3 7.6 6 12 6C16.4 6 19.8 8.3 21.5 12C19.8 15.7 16.4 18 12 18C7.6 18 4.2 15.7 2.5 12Z"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
+          <circle cx="12" cy="12" fill="currentColor" r="2.5" />
+        </svg>
+      );
+    case "logout":
+      return (
+        <svg {...sharedProps}>
+          <path d="M10 5H6V19H10" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M14 16L18 12L14 8" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M18 12H9" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        </svg>
+      );
+    case "back":
+      return (
+        <svg {...sharedProps}>
+          <path d="M10 6L4 12L10 18" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M4 12H20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        </svg>
+      );
+    case "save":
+      return (
+        <svg {...sharedProps}>
+          <path
+            d="M5 4H16L20 8V20H5V4Z"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
+          <path d="M8 4V10H15V4" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+          <path d="M8 20V14H16V20" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+        </svg>
+      );
+    case "cancel":
+      return (
+        <svg {...sharedProps}>
+          <path d="M6 6L18 18" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M18 6L6 18" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        </svg>
+      );
+    case "copy":
+      return (
+        <svg {...sharedProps}>
+          <rect height="12" rx="2" stroke="currentColor" width="10" x="9" y="8" />
+          <rect height="12" rx="2" stroke="currentColor" width="10" x="5" y="4" />
+        </svg>
+      );
+    case "download":
+      return (
+        <svg {...sharedProps}>
+          <path d="M12 4V14" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M8 10L12 14L16 10" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M5 19H19" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        </svg>
+      );
+    case "folder":
+      return (
+        <svg {...sharedProps}>
+          <path
+            d="M3 7H10L12 9H21V18H3V7Z"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
+        </svg>
+      );
+    case "refresh":
+      return (
+        <svg {...sharedProps}>
+          <path d="M4 12A8 8 0 0 1 18 7" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M18 4V8H14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          <path d="M20 12A8 8 0 0 1 6 17" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M6 20V16H10" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+        </svg>
+      );
+    case "reset":
+      return (
+        <svg {...sharedProps}>
+          <path d="M12 4V8" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M12 16V20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M4 12H8" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M16 12H20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="2" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...sharedProps}>
+          <circle cx="12" cy="12" fill="currentColor" r="2" />
+        </svg>
+      );
+  }
+}
+
 interface AuthScreenProps {
   busy: boolean;
   authMode: AuthMode;
@@ -251,7 +443,8 @@ function AuthScreen(props: AuthScreenProps): JSX.Element {
             value={authPassword}
             onChange={(event) => onAuthPasswordChange(event.target.value)}
           />
-          <button className="primary" disabled={busy} type="submit">
+          <button className="primary button-with-icon" disabled={busy} type="submit">
+            <AppIcon name={authMode === "login" ? "save" : "plus"} />
             {authMode === "login" ? "Sign In" : "Create Account"}
           </button>
         </form>
@@ -304,7 +497,8 @@ function ProjectsListPage(props: ProjectsListPageProps): JSX.Element {
           <p className="kicker">Projects</p>
           <h2>Manage Product Contexts</h2>
         </div>
-        <button className="primary" onClick={() => navigate("/projects/new")} type="button">
+        <button className="primary button-with-icon" onClick={() => navigate("/projects/new")} type="button">
+          <AppIcon name="plus" />
           Create Project
         </button>
       </header>
@@ -326,10 +520,17 @@ function ProjectsListPage(props: ProjectsListPageProps): JSX.Element {
                 <span>{project.name}</span>
               </label>
               <div className="inline-actions">
-                <button onClick={() => navigate(`/projects/${project.id}/edit`)} type="button">
+                <button className="button-with-icon" onClick={() => navigate(`/projects/${project.id}/edit`)} type="button">
+                  <AppIcon name="edit" />
                   Edit
                 </button>
-                <button className="danger" disabled={busy} onClick={() => void removeProject(project)} type="button">
+                <button
+                  className="danger button-with-icon"
+                  disabled={busy}
+                  onClick={() => void removeProject(project)}
+                  type="button"
+                >
+                  <AppIcon name="trash" />
                   Delete
                 </button>
               </div>
@@ -420,7 +621,8 @@ function ProjectFormPage(props: ProjectFormPageProps): JSX.Element {
             <p className="kicker">Projects</p>
             <h2>Project Not Found</h2>
           </div>
-          <button onClick={() => navigate("/projects")} type="button">
+          <button className="button-with-icon" onClick={() => navigate("/projects")} type="button">
+            <AppIcon name="back" />
             Back to Projects
           </button>
         </header>
@@ -438,7 +640,8 @@ function ProjectFormPage(props: ProjectFormPageProps): JSX.Element {
           <p className="kicker">Projects</p>
           <h2>{isEditMode ? "Update Project" : "Create Project"}</h2>
         </div>
-        <button onClick={() => navigate("/projects")} type="button">
+        <button className="button-with-icon" onClick={() => navigate("/projects")} type="button">
+          <AppIcon name="back" />
           Back to Projects
         </button>
       </header>
@@ -462,10 +665,12 @@ function ProjectFormPage(props: ProjectFormPageProps): JSX.Element {
             />
           </label>
           <div className="inline-actions">
-            <button className="primary" disabled={busy} type="submit">
+            <button className="primary button-with-icon" disabled={busy} type="submit">
+              <AppIcon name={isEditMode ? "save" : "plus"} />
               {isEditMode ? "Save Project" : "Create Project"}
             </button>
-            <button onClick={() => navigate("/projects")} type="button">
+            <button className="button-with-icon" onClick={() => navigate("/projects")} type="button">
+              <AppIcon name="cancel" />
               Cancel
             </button>
           </div>
@@ -512,7 +717,8 @@ function CategoriesListPage(props: CategoriesListPageProps): JSX.Element {
           <p className="kicker">Categories</p>
           <h2>Control Global Labels</h2>
         </div>
-        <button className="primary" onClick={() => navigate("/categories/new")} type="button">
+        <button className="primary button-with-icon" onClick={() => navigate("/categories/new")} type="button">
+          <AppIcon name="plus" />
           Create Category
         </button>
       </header>
@@ -529,15 +735,17 @@ function CategoriesListPage(props: CategoriesListPageProps): JSX.Element {
                 <span className="tag-chip">{titleize(category.kind)}</span>
               </div>
               <div className="inline-actions">
-                <button onClick={() => navigate(`/categories/${category.id}/edit`)} type="button">
+                <button className="button-with-icon" onClick={() => navigate(`/categories/${category.id}/edit`)} type="button">
+                  <AppIcon name="edit" />
                   Edit
                 </button>
                 <button
-                  className="danger"
+                  className="danger button-with-icon"
                   disabled={busy}
                   onClick={() => void removeCategory(category)}
                   type="button"
                 >
+                  <AppIcon name="trash" />
                   Delete
                 </button>
               </div>
@@ -621,7 +829,8 @@ function CategoryFormPage(props: CategoryFormPageProps): JSX.Element {
             <p className="kicker">Categories</p>
             <h2>Category Not Found</h2>
           </div>
-          <button onClick={() => navigate("/categories")} type="button">
+          <button className="button-with-icon" onClick={() => navigate("/categories")} type="button">
+            <AppIcon name="back" />
             Back to Categories
           </button>
         </header>
@@ -639,7 +848,8 @@ function CategoryFormPage(props: CategoryFormPageProps): JSX.Element {
           <p className="kicker">Categories</p>
           <h2>{isEditMode ? "Update Category" : "Create Category"}</h2>
         </div>
-        <button onClick={() => navigate("/categories")} type="button">
+        <button className="button-with-icon" onClick={() => navigate("/categories")} type="button">
+          <AppIcon name="back" />
           Back to Categories
         </button>
       </header>
@@ -665,10 +875,12 @@ function CategoryFormPage(props: CategoryFormPageProps): JSX.Element {
             </select>
           </label>
           <div className="inline-actions">
-            <button className="primary" disabled={busy} type="submit">
+            <button className="primary button-with-icon" disabled={busy} type="submit">
+              <AppIcon name={isEditMode ? "save" : "plus"} />
               {isEditMode ? "Save Category" : "Create Category"}
             </button>
-            <button onClick={() => navigate("/categories")} type="button">
+            <button className="button-with-icon" onClick={() => navigate("/categories")} type="button">
+              <AppIcon name="cancel" />
               Cancel
             </button>
           </div>
@@ -1106,11 +1318,13 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
             <h2>{isFormMode ? (isEditMode ? "Update Item" : "Create Item") : selectedProjectName}</h2>
           </div>
           {isFormMode ? (
-            <button onClick={() => navigate("/issues")} type="button">
+            <button className="button-with-icon" onClick={() => navigate("/issues")} type="button">
+              <AppIcon name="back" />
               Back to Issues
             </button>
           ) : (
-            <button className="primary" onClick={() => navigate("/issues/new")} type="button">
+            <button className="primary button-with-icon" onClick={() => navigate("/issues/new")} type="button">
+              <AppIcon name="plus" />
               Create Item
             </button>
           )}
@@ -1277,11 +1491,13 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                 </p>
               </div>
               <div className="inline-actions">
-                <button onClick={openFilePicker} type="button">
+                <button className="button-with-icon" onClick={openFilePicker} type="button">
+                  <AppIcon name="plus" />
                   Choose Screenshots
                 </button>
                 {pendingImages.length > 0 && (
-                  <button onClick={clearPendingImages} type="button">
+                  <button className="button-with-icon" onClick={clearPendingImages} type="button">
+                    <AppIcon name="refresh" />
                     Clear Queue
                   </button>
                 )}
@@ -1315,6 +1531,8 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                         </div>
                         <div className="inline-actions">
                           <button
+                            aria-label="Preview queued image"
+                            className="icon-button"
                             onClick={() =>
                               setPreviewImage({
                                 url: image.previewUrl,
@@ -1322,12 +1540,19 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                                 pendingId: image.id
                               })
                             }
+                            title="Preview"
                             type="button"
                           >
-                            Preview
+                            <AppIcon name="eye" />
                           </button>
-                          <button className="danger" onClick={() => removePendingImage(image.id)} type="button">
-                            Remove
+                          <button
+                            aria-label="Remove queued image"
+                            className="danger icon-button"
+                            onClick={() => removePendingImage(image.id)}
+                            title="Remove"
+                            type="button"
+                          >
+                            <AppIcon name="trash" />
                           </button>
                         </div>
                       </article>
@@ -1338,10 +1563,12 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
             </div>
 
               <div className="inline-actions">
-                <button className="primary" disabled={busy} type="submit">
+                <button className="primary button-with-icon" disabled={busy} type="submit">
+                  <AppIcon name={isEditMode ? "save" : "plus"} />
                   {isEditMode ? "Save Item" : "Create Item"}
                 </button>
-                <button onClick={() => navigate("/issues")} type="button">
+                <button className="button-with-icon" onClick={() => navigate("/issues")} type="button">
+                  <AppIcon name="cancel" />
                   Cancel
                 </button>
               </div>
@@ -1392,6 +1619,8 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                           </button>
                           <div className="inline-actions">
                             <button
+                              aria-label="Preview image"
+                              className="icon-button"
                               onClick={() =>
                                 setPreviewImage({
                                   url: image.url,
@@ -1400,16 +1629,19 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                                   imageId: image.id
                                 })
                               }
+                              title="Preview"
                               type="button"
                             >
-                              Preview
+                              <AppIcon name="eye" />
                             </button>
                             <button
-                              className="danger"
+                              aria-label="Remove image"
+                              className="danger icon-button"
                               onClick={() => void removeImage(item.id, image.id)}
+                              title="Remove"
                               type="button"
                             >
-                              Remove
+                              <AppIcon name="trash" />
                             </button>
                           </div>
                         </figure>
@@ -1418,11 +1650,23 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                   )}
 
                   <div className="inline-actions">
-                    <button onClick={() => navigate(`/issues/${item.id}/edit`)} type="button">
-                      Edit
+                    <button
+                      aria-label="Edit item"
+                      className="icon-button"
+                      onClick={() => navigate(`/issues/${item.id}/edit`)}
+                      title="Edit"
+                      type="button"
+                    >
+                      <AppIcon name="edit" />
                     </button>
-                    <button className="danger" onClick={() => void removeItem(item)} type="button">
-                      Delete
+                    <button
+                      aria-label="Delete item"
+                      className="danger icon-button"
+                      onClick={() => void removeItem(item)}
+                      title="Delete"
+                      type="button"
+                    >
+                      <AppIcon name="trash" />
                     </button>
                   </div>
                 </article>
@@ -1443,7 +1687,8 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
           <article className="image-modal" onClick={(event) => event.stopPropagation()}>
             <header className="image-modal-head">
               <strong title={previewImage.filename}>{previewImage.filename}</strong>
-              <button onClick={() => setPreviewImage(null)} type="button">
+              <button className="button-with-icon" onClick={() => setPreviewImage(null)} type="button">
+                <AppIcon name="close" />
                 Close
               </button>
             </header>
@@ -1451,7 +1696,7 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
             <div className="inline-actions">
               {previewImage.pendingId ? (
                 <button
-                  className="danger"
+                  className="danger button-with-icon"
                   onClick={() => {
                     if (previewImage.pendingId) {
                       removePendingImage(previewImage.pendingId);
@@ -1459,11 +1704,12 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                   }}
                   type="button"
                 >
+                  <AppIcon name="trash" />
                   Remove from Queue
                 </button>
               ) : (
                 <button
-                  className="danger"
+                  className="danger button-with-icon"
                   disabled={busy}
                   onClick={() => {
                     if (!previewImage.itemId || !previewImage.imageId) {
@@ -1474,6 +1720,7 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                   }}
                   type="button"
                 >
+                  <AppIcon name="trash" />
                   Remove from Item
                 </button>
               )}
@@ -1629,7 +1876,13 @@ function PromptsPage(props: PromptsPageProps): JSX.Element {
           <p className="kicker">Prompt Studio</p>
           <h2>{selectedProjectName}</h2>
         </div>
-        <button className="primary" disabled={busy} onClick={() => void downloadProjectPrompt()} type="button">
+        <button
+          className="primary button-with-icon"
+          disabled={busy}
+          onClick={() => void downloadProjectPrompt()}
+          type="button"
+        >
+          <AppIcon name="download" />
           Download Project YAML + Images
         </button>
       </header>
@@ -1767,10 +2020,17 @@ function PromptsPage(props: PromptsPageProps): JSX.Element {
               <h3>{selectedItem.title}</h3>
               <p>{selectedItem.description}</p>
               <div className="inline-actions">
-                <button className="primary" disabled={busy} onClick={() => void copyPrompt()} type="button">
+                <button
+                  className="primary button-with-icon"
+                  disabled={busy}
+                  onClick={() => void copyPrompt()}
+                  type="button"
+                >
+                  <AppIcon name="copy" />
                   Copy Prompt
                 </button>
-                <button disabled={busy} onClick={() => void downloadItemPrompt()} type="button">
+                <button className="button-with-icon" disabled={busy} onClick={() => void downloadItemPrompt()} type="button">
+                  <AppIcon name="download" />
                   Download Item YAML + Images
                 </button>
               </div>
@@ -1785,6 +2045,219 @@ function PromptsPage(props: PromptsPageProps): JSX.Element {
             </div>
           )}
         </div>
+      </article>
+    </section>
+  );
+}
+
+interface PromptTemplatesPageProps {
+  selectedProjectId: string;
+  selectedProjectName: string;
+  reportError: ReportError;
+  reportNotice: ReportNotice;
+}
+
+function PromptTemplatesPage(props: PromptTemplatesPageProps): JSX.Element {
+  const { selectedProjectId, selectedProjectName, reportError, reportNotice } = props;
+
+  const [templates, setTemplates] = useState<PromptTemplateSet>(EMPTY_PROMPT_TEMPLATES);
+  const [savedTemplates, setSavedTemplates] = useState<PromptTemplateSet>(EMPTY_PROMPT_TEMPLATES);
+  const [defaultTemplates, setDefaultTemplates] = useState<PromptTemplateSet>(EMPTY_PROMPT_TEMPLATES);
+  const [placeholders, setPlaceholders] = useState<PromptTemplatePlaceholder[]>([]);
+  const [showPlaceholderReference, setShowPlaceholderReference] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const hasUnsavedChanges = useMemo(
+    () => PROMPT_TEMPLATE_KINDS.some((kind) => templates[kind] !== savedTemplates[kind]),
+    [savedTemplates, templates]
+  );
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setTemplates(EMPTY_PROMPT_TEMPLATES);
+      setSavedTemplates(EMPTY_PROMPT_TEMPLATES);
+      setDefaultTemplates(EMPTY_PROMPT_TEMPLATES);
+      setPlaceholders([]);
+      return;
+    }
+
+    let mounted = true;
+
+    const loadTemplates = async (): Promise<void> => {
+      try {
+        setLoading(true);
+        const response = await getPromptTemplates(selectedProjectId);
+        if (!mounted) {
+          return;
+        }
+
+        setTemplates(response.templates);
+        setSavedTemplates(response.templates);
+        setDefaultTemplates(response.defaults);
+        setPlaceholders(response.placeholders);
+      } catch (error) {
+        if (mounted) {
+          reportError(error, "Failed to load prompt templates");
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadTemplates();
+
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProjectId]);
+
+  function updateTemplate(kind: PromptTemplateKind, value: string): void {
+    setTemplates((current) => ({
+      ...current,
+      [kind]: value
+    }));
+  }
+
+  function revertUnsaved(): void {
+    setTemplates(savedTemplates);
+  }
+
+  function resetToDefaults(): void {
+    setTemplates(defaultTemplates);
+  }
+
+  async function saveTemplates(): Promise<void> {
+    if (!selectedProjectId || !hasUnsavedChanges) {
+      return;
+    }
+
+    try {
+      setBusy(true);
+      const response = await updatePromptTemplates(selectedProjectId, templates);
+      setTemplates(response.templates);
+      setSavedTemplates(response.templates);
+      reportNotice("Prompt templates saved");
+    } catch (error) {
+      reportError(error, "Failed to save prompt templates");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyPlaceholder(token: string): Promise<void> {
+    const wrapped = `{{${token}}}`;
+
+    try {
+      await navigator.clipboard.writeText(wrapped);
+      reportNotice(`Copied placeholder: ${wrapped}`);
+    } catch (error) {
+      reportError(error, "Failed to copy placeholder");
+    }
+  }
+
+  if (!selectedProjectId) {
+    return (
+      <section className="page-section">
+        <article className="panel-card">
+          <h2>No Project Selected</h2>
+          <p className="helper">Select a project on the Projects page to edit prompt templates.</p>
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="page-section">
+      <header className="section-head">
+        <div>
+          <p className="kicker">Prompt Template Editor</p>
+          <h2>{selectedProjectName}</h2>
+        </div>
+        <div className="inline-actions">
+          <button
+            className="primary button-with-icon"
+            disabled={busy || loading || !hasUnsavedChanges}
+            onClick={() => void saveTemplates()}
+            type="button"
+          >
+            <AppIcon name="save" />
+            Save Templates
+          </button>
+          <button className="button-with-icon" disabled={busy || loading || !hasUnsavedChanges} onClick={revertUnsaved} type="button">
+            <AppIcon name="refresh" />
+            Revert Unsaved
+          </button>
+          <button className="button-with-icon" disabled={busy || loading} onClick={resetToDefaults} type="button">
+            <AppIcon name="reset" />
+            Reset to Defaults
+          </button>
+        </div>
+      </header>
+
+      {loading && (
+        <article className="panel-card">
+          <p className="helper">Loading templates...</p>
+        </article>
+      )}
+
+      <article className="panel-card">
+        <div className="section-head">
+          <h3>Placeholder Reference</h3>
+          <button onClick={() => setShowPlaceholderReference((current) => !current)} type="button">
+            {showPlaceholderReference ? "Hide" : "Show"} Placeholders
+          </button>
+        </div>
+
+        {showPlaceholderReference && (
+          <>
+            <p className="helper">
+              Click a placeholder to copy it. Use values like <code>{"{{item.title}}"}</code> in templates.
+            </p>
+            <div className="placeholder-grid">
+              {placeholders.map((placeholder) => (
+                <button
+                  className="placeholder-row placeholder-copy"
+                  key={placeholder.token}
+                  onClick={() => void copyPlaceholder(placeholder.token)}
+                  type="button"
+                >
+                  <code>{`{{${placeholder.token}}}`}</code>
+                  <span>{placeholder.description}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {!showPlaceholderReference && (
+          <p className="helper">
+            Placeholder list is collapsed by default.
+          </p>
+        )}
+      </article>
+
+      <article className="panel-card template-editor-grid">
+        {PROMPT_TEMPLATE_KINDS.map((kind) => {
+          const dirty = templates[kind] !== savedTemplates[kind];
+
+          return (
+            <label key={kind} className="template-editor-field">
+              <span className="template-editor-title">{titleize(kind)} Template</span>
+              <textarea
+                rows={14}
+                value={templates[kind]}
+                onChange={(event) => updateTemplate(kind, event.target.value)}
+              />
+              <span className={dirty ? "template-status dirty" : "template-status"}>
+                {dirty ? "Unsaved changes" : "Saved"}
+              </span>
+            </label>
+          );
+        })}
       </article>
     </section>
   );
@@ -1818,7 +2291,8 @@ function AppShell(props: ShellProps): JSX.Element {
     reportError,
     reportNotice
   } = props;
-  const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
@@ -1829,19 +2303,41 @@ function AppShell(props: ShellProps): JSX.Element {
     { to: "/issues", label: "Issues" },
     { to: "/projects", label: "Projects" },
     { to: "/categories", label: "Categories" },
-    { to: "/prompts", label: "Prompts" }
+    { to: "/prompts", label: "Prompts" },
+    { to: "/prompt-templates", label: "Templates" }
   ];
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   return (
     <div className="shell-wrap">
-      <aside className="sidebar">
+      <button
+        aria-label="Close menu"
+        className={mobileMenuOpen ? "mobile-sidebar-backdrop show" : "mobile-sidebar-backdrop"}
+        onClick={() => setMobileMenuOpen(false)}
+        type="button"
+      />
+
+      <aside className={mobileMenuOpen ? "sidebar mobile-open" : "sidebar"}>
         <div className="brand">
-          <div className="logo-lockup">
-            <BrandMark />
-            <div className="brand-copy">
-              <p className="kicker">AAM Tracker</p>
-              <h1>Issue Prompt Lab</h1>
+          <div className="brand-head">
+            <div className="logo-lockup">
+              <BrandMark />
+              <div className="brand-copy">
+                <p className="kicker">AAM Tracker</p>
+                <h1>Issue Prompt Lab</h1>
+              </div>
             </div>
+            <button
+              aria-label="Close menu"
+              className="mobile-sidebar-close icon-button"
+              onClick={() => setMobileMenuOpen(false)}
+              type="button"
+            >
+              <AppIcon name="close" />
+            </button>
           </div>
           <p>Capture bugs and ideas fast, then export clean AI-ready prompts.</p>
         </div>
@@ -1864,7 +2360,8 @@ function AppShell(props: ShellProps): JSX.Element {
             <p>{currentUser.email}</p>
           </div>
           <span className="tag-chip">{currentUser.role}</span>
-          <button onClick={onLogout} type="button">
+          <button className="button-with-icon" onClick={onLogout} type="button">
+            <AppIcon name="logout" />
             Logout
           </button>
         </div>
@@ -1872,6 +2369,14 @@ function AppShell(props: ShellProps): JSX.Element {
 
       <main className="shell-main">
         <header className="topbar">
+          <button
+            className="mobile-menu-button button-with-icon"
+            onClick={() => setMobileMenuOpen(true)}
+            type="button"
+          >
+            <AppIcon name="menu" />
+            Menu
+          </button>
           <div className="project-picker">
             <label>
               Active Project
@@ -1887,14 +2392,6 @@ function AppShell(props: ShellProps): JSX.Element {
                 ))}
               </select>
             </label>
-            <button className="primary" onClick={() => navigate("/projects")} type="button">
-              Manage Projects
-            </button>
-          </div>
-
-          <div className="current-project-pill">
-            <span>Current:</span>
-            <strong>{selectedProject?.name || "None"}</strong>
           </div>
         </header>
 
@@ -2022,22 +2519,21 @@ function AppShell(props: ShellProps): JSX.Element {
                 />
               }
             />
+            <Route
+              path="/prompt-templates"
+              element={
+                <PromptTemplatesPage
+                  selectedProjectId={selectedProjectId}
+                  selectedProjectName={selectedProject?.name || "No Project"}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
             <Route path="*" element={<Navigate replace to="/issues" />} />
           </Routes>
         </div>
       </main>
-
-      <nav className="mobile-nav" aria-label="Mobile">
-        {navItems.map((item) => (
-          <NavLink
-            className={({ isActive }) => (isActive ? "mobile-link active" : "mobile-link")}
-            key={item.to}
-            to={item.to}
-          >
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
     </div>
   );
 }

@@ -21,6 +21,7 @@ Issue Prompt Tracker is a responsive web app + API for capturing project-specifi
   - `/projects`: project CRUD + active project selection
   - `/categories`: global category CRUD
   - `/prompts`: filter items, copy prompt, download item/project prompt bundles
+  - `/prompt-templates`: per-project template editor for `issue` / `feature` / `other` prompt variants
 - Mobile-first navigation:
   - desktop sidebar nav
   - bottom tab nav on small screens
@@ -46,6 +47,7 @@ Issue Prompt Tracker is a responsive web app + API for capturing project-specifi
 ## Data Model Notes
 - `User` model added with `role`
 - `Project.ownerId` and `Item.ownerId` enforce per-user scope
+- `PromptTemplate` stores per-project template text keyed by `CategoryKind` (`issue` / `feature` / `other`)
 - Existing records are backfilled to admin owner on startup if owner is null
 
 ## Dev Commands
@@ -79,6 +81,18 @@ When making changes, append an entry to **Change Log** below with:
 - Verification performed:
   - `npm run test`
   - `npm run build`
+- Added project-scoped prompt template editor and API support:
+  - new route `/prompt-templates` in web shell
+  - API endpoints `GET/PUT /api/prompt-templates/:projectId`
+  - prompt generation/export now resolve template kind from item category (`issue` / `feature` / `other`) and render placeholders
+- Added Prisma migration `20260223235000_add_prompt_templates` with `PromptTemplate` table (`projectId + kind` unique).
+- Migration/env impact:
+  - DB migration required: `20260223235000_add_prompt_templates`
+  - no new environment variables
+- Verification performed:
+  - `npm run test`
+  - `npm run build`
+  - `set -a; source .env; set +a; npm run prisma:migrate:deploy`
   - login/auth API smoke checks
 - Normalized `docker-compose.yml` environment placeholders to sane defaults (`:-`) for smoother local/Coolify setup.
 - Added Postgres variables to `.env.example` (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST_PORT`).
@@ -97,6 +111,14 @@ When making changes, append an entry to **Change Log** below with:
   - Projects: `/projects`, `/projects/new`, `/projects/:projectId/edit`
   - Categories: `/categories`, `/categories/new`, `/categories/:categoryId/edit`
   - Issues: `/issues`, `/issues/new`, `/issues/:itemId/edit`
+- Mobile shell UX updates:
+  - removed topbar `Manage Projects` button (project selection handled by dropdown)
+  - removed redundant topbar `Current: <project>` pill (active project shown only via selector)
+  - replaced bottom mobile nav with burger-triggered sidebar drawer
+  - reduced mobile dead space by removing bottom-nav route host spacing
+- Action controls now use iconography:
+  - icon-only quick actions for preview/remove/edit/delete
+  - icon-leading labels for primary/secondary action buttons across pages
 - Updated item validation rules:
   - `title` and `description` are now optional on create/update (empty values allowed)
   - `type`, `category`, `status`, and `priority` are enforced as required in the web form

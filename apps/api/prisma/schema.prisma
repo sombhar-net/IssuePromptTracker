@@ -45,8 +45,9 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  items Item[]
+  owner           User?            @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  items           Item[]
+  promptTemplates PromptTemplate[]
 
   @@index([ownerId])
 }
@@ -113,4 +114,18 @@ model User {
 
   projects Project[]
   items    Item[]
+}
+
+model PromptTemplate {
+  id        String       @id @default(cuid())
+  projectId String
+  kind      CategoryKind
+  template  String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, kind])
+  @@index([projectId])
 }

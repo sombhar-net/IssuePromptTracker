@@ -7,6 +7,8 @@ import type {
   Item,
   ItemFilters,
   ItemPayload,
+  PromptTemplateSet,
+  PromptTemplatesResponse,
   Project,
   PromptResponse
 } from "./types";
@@ -313,6 +315,23 @@ export async function createItemPrompt(itemId: string): Promise<PromptResponse> 
   return request<PromptResponse>(`/prompts/item/${itemId}`, {
     method: "POST"
   });
+}
+
+export async function getPromptTemplates(projectId: string): Promise<PromptTemplatesResponse> {
+  return request<PromptTemplatesResponse>(`/prompt-templates/${projectId}`);
+}
+
+export async function updatePromptTemplates(
+  projectId: string,
+  templates: PromptTemplateSet
+): Promise<{ projectId: string; templates: PromptTemplateSet }> {
+  return request<{ projectId: string; templates: PromptTemplateSet }>(
+    `/prompt-templates/${projectId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ templates })
+    }
+  );
 }
 
 export async function downloadItemExport(itemId: string): Promise<void> {
