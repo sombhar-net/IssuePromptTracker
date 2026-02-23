@@ -87,3 +87,4 @@ When making changes, append an entry to **Change Log** below with:
 - Generated and committed branded icon/image assets (`favicon`, apple icon, PWA icons, manifest screenshots).
 - Added reusable asset generator script `npm run assets:generate -w apps/web`.
 - Integrated brand mark logo into auth and app shell UI.
+- Fixed Coolify web image build failure by changing `docker/Dockerfile.web` final stage copy to `COPY --from=0 ...` (stage-index copy) to avoid alias resolution issues after Coolify Dockerfile mutation for build secrets.
