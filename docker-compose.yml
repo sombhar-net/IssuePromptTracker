@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aamtracker
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d aamtracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://app:app@postgres:5432/aamtracker?schema=public
+      UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_MB: 8
+      CORS_ORIGIN: "*"
+      JWT_SECRET: change-me-in-production
+      JWT_EXPIRES_IN: 7d
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: Admin123!
+      ADMIN_NAME: Admin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/data/uploads
+    expose:
+      - "4000"
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
+  uploads_data:

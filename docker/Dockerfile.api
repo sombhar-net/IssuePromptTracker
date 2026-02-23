@@ -1,0 +1,25 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json tsconfig.base.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY packages/shared/package.json packages/shared/package.json
+
+RUN npm install
+
+COPY packages/shared packages/shared
+COPY apps/api apps/api
+
+RUN npm run build -w packages/shared \
+  && npm run prisma:generate -w apps/api \
+  && npm run build -w apps/api
+
+RUN mkdir -p /data/uploads
+
+ENV NODE_ENV=production
+ENV PORT=4000
+
+EXPOSE 4000
+
+CMD ["sh", "-c", "npm run prisma:migrate:deploy -w apps/api && npm run start -w apps/api"]
