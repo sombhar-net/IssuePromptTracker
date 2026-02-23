@@ -88,3 +88,47 @@ When making changes, append an entry to **Change Log** below with:
 - Added reusable asset generator script `npm run assets:generate -w apps/web`.
 - Integrated brand mark logo into auth and app shell UI.
 - Fixed Coolify web image build failure by changing `docker/Dockerfile.web` final stage copy to `COPY --from=0 ...` (stage-index copy) to avoid alias resolution issues after Coolify Dockerfile mutation for build secrets.
+- Upgraded issue screenshot uploader UX to advanced queue flow:
+  - drag-and-drop zone
+  - clipboard image paste support on web (`Ctrl/Cmd+V` on focused dropzone)
+  - pending image previews with per-image remove/clear queue
+  - full-screen image preview modal for both queued and saved images
+- Split CRUD UX into dedicated list/form routes:
+  - Projects: `/projects`, `/projects/new`, `/projects/:projectId/edit`
+  - Categories: `/categories`, `/categories/new`, `/categories/:categoryId/edit`
+  - Issues: `/issues`, `/issues/new`, `/issues/:itemId/edit`
+- Updated item validation rules:
+  - `title` and `description` are now optional on create/update (empty values allowed)
+  - `type`, `category`, `status`, and `priority` are enforced as required in the web form
+- Improved validation UX on `/issues`:
+  - invalid required fields are highlighted with inline red error messages
+  - API validation errors are mapped into the global status alert with clearer messages
+- Hardened API category validation for item create/update to return field-level validation issues when category IDs are invalid.
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run test`
+  - `npm run build`
+- Hardened Docker build reliability for Coolify by updating `docker/Dockerfile.api` and `docker/Dockerfile.web`:
+  - include `package-lock.json` in the dependency layer
+  - force devDependency install during image build with `npm install --include=dev` so workspace build tools are available even when Coolify injects build-time env/ARG values
+- Migration/env impact: none.
+- Verification performed:
+  - `DOCKER_BUILDKIT=1 docker build --no-cache -f docker/Dockerfile.web -t aam-web-test:fix .`
+  - `DOCKER_BUILDKIT=1 docker build --no-cache -f docker/Dockerfile.api -t aam-api-test:fix .`
+- Fixed local upload path resolution to be stable regardless of process CWD:
+  - API now resolves relative `UPLOAD_DIR` from `apps/api` root, not `process.cwd()`
+  - backward compatibility added for legacy `UPLOAD_DIR=./apps/api/uploads` values
+- Production safety default added in API env handling:
+  - if `NODE_ENV=production` and `UPLOAD_DIR` is not set, API now defaults to `/data/uploads`
+- Updated local env defaults:
+  - `.env.example` now uses `UPLOAD_DIR=./uploads` (maps to `apps/api/uploads`)
+  - README clarifies local upload path and keeps production/Coolify requirement as `UPLOAD_DIR=/data/uploads`
+- Manual local data fix performed:
+  - copied existing files from legacy `apps/api/apps/api/uploads` into `apps/api/uploads`
+  - removed legacy nested directory after copy
+- Migration/env impact:
+  - no DB migration
+  - recommended env value is `UPLOAD_DIR=./uploads` for local development
+- Verification performed:
+  - `npm run test`
+  - `npm run build`

@@ -51,11 +51,39 @@ button {
   padding: 0.62rem 0.72rem;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  padding: 0;
+}
+
 label {
   display: grid;
   gap: 0.35rem;
   font-size: 0.92rem;
   color: var(--muted);
+}
+
+label.field-with-error {
+  color: var(--danger);
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: #d26b6b;
+  background: #fff3f3;
+}
+
+.field-error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--danger);
 }
 
 button {
@@ -452,6 +480,114 @@ button.danger {
   font-size: 0.82rem;
 }
 
+.screenshot-field {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.dropzone {
+  border: 2px dashed #9dbab4;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #fbfffc, #f2faf7);
+  min-height: 140px;
+  padding: 0.85rem;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.42rem;
+  text-align: center;
+  cursor: copy;
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+}
+
+.dropzone:focus {
+  outline: 2px solid rgba(14, 118, 101, 0.35);
+  outline-offset: 2px;
+}
+
+.dropzone.active {
+  border-color: var(--brand);
+  background: linear-gradient(160deg, #e8faf4, #f2fbef);
+  transform: translateY(-1px);
+}
+
+.dropzone-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.pending-upload-panel {
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: #fcfffd;
+  padding: 0.62rem;
+  display: grid;
+  gap: 0.62rem;
+}
+
+.pending-upload-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.pending-upload-head h4 {
+  margin: 0;
+}
+
+.media-preview-grid {
+  display: grid;
+  gap: 0.62rem;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+}
+
+.media-preview-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 0.45rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.media-thumb,
+.thumb-action {
+  border: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.media-thumb img,
+.thumb-action img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.media-card-meta {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.media-card-meta strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.83rem;
+}
+
+.media-card-meta span {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .thumb-grid {
   display: grid;
   gap: 0.6rem;
@@ -470,6 +606,50 @@ button.danger {
   border-radius: 10px;
   object-fit: cover;
   border: 1px solid var(--line);
+}
+
+.image-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.58);
+  display: grid;
+  place-items: center;
+  padding: 0.8rem;
+}
+
+.image-modal {
+  width: min(920px, 96vw);
+  max-height: 92vh;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  padding: 0.72rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.image-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.image-modal-head strong {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.image-modal img {
+  width: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f6f9f8;
 }
 
 .prompt-layout {
@@ -556,6 +736,10 @@ button.danger {
     grid-template-columns: 1fr;
   }
 
+  .media-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .project-picker label {
     min-width: 100%;
   }
@@ -607,6 +791,20 @@ button.danger {
     border-radius: 14px;
     padding: 0.7rem;
     margin-bottom: 4.6rem;
+  }
+
+  .media-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .image-modal {
+    width: 96vw;
+    max-height: 90vh;
+    padding: 0.62rem;
+  }
+
+  .image-modal img {
+    max-height: 62vh;
   }
 
   .mobile-nav {

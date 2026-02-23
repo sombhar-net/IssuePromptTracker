@@ -667,10 +667,10 @@ app.post("/api/items", async (request, reply) => {
   const body = z
     .object({
       projectId: z.string().min(1),
-      categoryId: z.string().min(1).optional().nullable(),
+      categoryId: z.string().min(1),
       type: itemTypeSchema,
-      title: z.string().min(1).max(200),
-      description: z.string().min(1).max(8000),
+      title: z.string().max(200).optional().default(""),
+      description: z.string().max(8000).optional().default(""),
       status: itemStatusSchema.optional().default("open"),
       priority: itemPrioritySchema.optional().default("medium"),
       tags: z.array(z.string().min(1).max(40)).optional().default([])
@@ -684,11 +684,23 @@ app.post("/api/items", async (request, reply) => {
     return reply.status(404).send({ message: "Project not found" });
   }
 
+  const category = await prisma.category.findUnique({
+    where: { id: body.categoryId },
+    select: { id: true }
+  });
+
+  if (!category) {
+    return reply.status(400).send({
+      message: "Validation failed",
+      issues: [{ path: ["categoryId"], message: "Category does not exist" }]
+    });
+  }
+
   const item = await prisma.item.create({
     data: {
       ownerId: project.ownerId ?? authUser.id,
       projectId: body.projectId,
-      categoryId: body.categoryId || null,
+      categoryId: body.categoryId,
       type: body.type,
       title: body.title.trim(),
       description: body.description.trim(),
@@ -743,10 +755,10 @@ app.patch("/api/items/:id", async (request, reply) => {
   const body = z
     .object({
       projectId: z.string().min(1).optional(),
-      categoryId: z.string().min(1).optional().nullable(),
+      categoryId: z.string().min(1).optional(),
       type: itemTypeSchema.optional(),
-      title: z.string().min(1).max(200).optional(),
-      description: z.string().min(1).max(8000).optional(),
+      title: z.string().max(200).optional(),
+      description: z.string().max(8000).optional(),
       status: itemStatusSchema.optional(),
       priority: itemPrioritySchema.optional(),
       tags: z.array(z.string().min(1).max(40)).optional()
@@ -779,12 +791,26 @@ app.patch("/api/items/:id", async (request, reply) => {
     }
   }
 
+  if (body.categoryId) {
+    const category = await prisma.category.findUnique({
+      where: { id: body.categoryId },
+      select: { id: true }
+    });
+
+    if (!category) {
+      return reply.status(400).send({
+        message: "Validation failed",
+        issues: [{ path: ["categoryId"], message: "Category does not exist" }]
+      });
+    }
+  }
+
   return prisma.item.update({
     where: { id: params.id },
     data: {
       ownerId: nextOwnerId,
       projectId: body.projectId,
-      categoryId: body.categoryId === undefined ? undefined : body.categoryId || null,
+      categoryId: body.categoryId,
       type: body.type,
       title: body.title?.trim(),
       description: body.description?.trim(),

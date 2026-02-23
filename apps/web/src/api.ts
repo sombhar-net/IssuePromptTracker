@@ -15,6 +15,28 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const UPLOAD_BASE = import.meta.env.VITE_UPLOAD_BASE_URL || "";
 const TOKEN_STORAGE_KEY = "aam_auth_token";
 
+export interface ApiErrorIssue {
+  path?: Array<string | number>;
+  message: string;
+}
+
+interface ApiErrorPayload {
+  message?: string;
+  issues?: ApiErrorIssue[];
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly issues: ApiErrorIssue[];
+
+  constructor(status: number, message: string, issues: ApiErrorIssue[] = []) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.issues = issues;
+  }
+}
+
 let authToken: string | null =
   typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_STORAGE_KEY) : null;
 
@@ -75,8 +97,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       saveToken(null);
     }
 
-    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(payload?.message || `Request failed (${response.status})`);
+    const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+    throw new ApiError(
+      response.status,
+      payload?.message || `Request failed (${response.status})`,
+      payload?.issues || []
+    );
   }
 
   if (response.status === 204) {
@@ -107,8 +133,12 @@ async function downloadFromApi(path: string, fallbackName: string): Promise<void
       saveToken(null);
     }
 
-    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(payload?.message || `Download failed (${response.status})`);
+    const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+    throw new ApiError(
+      response.status,
+      payload?.message || `Download failed (${response.status})`,
+      payload?.issues || []
+    );
   }
 
   const filename = parseFilenameFromDisposition(

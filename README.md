@@ -8,9 +8,9 @@ A mobile-friendly and web-ready app to capture issues/features with screenshots,
 - Includes authentication with roles (`USER`, `ADMIN`)
 - Works as an installable PWA (desktop/mobile home screen)
 - Provides dedicated responsive pages:
-  - `Projects`: CRUD + active project selection
-  - `Categories`: CRUD for global category list
-  - `Issues`: CRUD for issues/features with multi-screenshot attachments
+  - `Projects`: list page + separate create/update pages
+  - `Categories`: list page + separate create/update pages
+  - `Issues`: list page + separate create/update pages with multi-screenshot attachments
   - `Prompts`: filter, copy prompt, and download YAML + images bundles
 - Exports prompt bundles as zip files:
   - Single item: `prompt.yaml` + `images/*`
@@ -57,6 +57,7 @@ npm install
 ```bash
 cp .env.example .env
 ```
+Local uploads should use `UPLOAD_DIR=./uploads` (stored under `apps/api/uploads`).
 
 3. Start Postgres (Docker) and run migrations:
 ```bash
@@ -97,7 +98,7 @@ Then open `http://localhost:3000`.
   - `POSTGRES_PASSWORD=<strong-password>`
 - API vars:
   - `DATABASE_URL=postgresql://app:<strong-password>@postgres:5432/aamtracker?schema=public`
-  - `UPLOAD_DIR=/data/uploads`
+  - `UPLOAD_DIR=/data/uploads` (must stay absolute for persistent volume mounts)
   - `MAX_UPLOAD_MB=8`
   - `CORS_ORIGIN=*` (or your domain)
   - `JWT_SECRET=<long-random-secret>`

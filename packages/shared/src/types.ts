@@ -1,4 +1,5 @@
 export type ItemType = "issue" | "feature";
+export type PromptTemplateKind = ItemType | "other";
 
 export type ItemStatus = "open" | "in_progress" | "resolved" | "archived";
 
@@ -13,6 +14,7 @@ export interface PromptItemInput {
   id: string;
   projectName: string;
   categoryName?: string | null;
+  categoryKind?: PromptTemplateKind | null;
   type: ItemType;
   title: string;
   description: string;

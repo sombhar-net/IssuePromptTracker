@@ -1,6 +1,16 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import {
+  ClipboardEvent,
+  DragEvent,
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import {
+  ApiError,
   clearAuthToken,
   createCategory,
   createItem,
@@ -24,6 +34,7 @@ import {
   updateProject,
   uploadItemImages
 } from "./api";
+import type { ApiErrorIssue } from "./api";
 import type {
   AuthUser,
   Category,
@@ -42,11 +53,21 @@ type AuthMode = "login" | "register";
 type ReportError = (error: unknown, fallbackMessage: string) => void;
 
 type ReportNotice = (message: string) => void;
+type ItemFormField = "type" | "categoryId" | "title" | "description" | "status" | "priority";
+type ItemFormErrors = Partial<Record<ItemFormField, string>>;
 
 const ITEM_TYPES: ItemType[] = ["issue", "feature"];
 const ITEM_STATUSES: ItemStatus[] = ["open", "in_progress", "resolved", "archived"];
 const ITEM_PRIORITIES: ItemPriority[] = ["low", "medium", "high", "critical"];
 const CATEGORY_KINDS: CategoryKind[] = ["issue", "feature", "other"];
+const ITEM_FORM_FIELDS: ItemFormField[] = [
+  "type",
+  "categoryId",
+  "title",
+  "description",
+  "status",
+  "priority"
+];
 
 const SELECTED_PROJECT_STORAGE_KEY = "aam_selected_project_id";
 
@@ -73,6 +94,46 @@ function parseTags(raw: string): string[] {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function getDefaultCategoryId(categories: Category[]): string | null {
+  return categories[0]?.id || null;
+}
+
+function isItemFormField(pathPart: unknown): pathPart is ItemFormField {
+  return typeof pathPart === "string" && ITEM_FORM_FIELDS.includes(pathPart as ItemFormField);
+}
+
+function mapItemFormIssues(issues: ApiErrorIssue[]): ItemFormErrors {
+  const nextErrors: ItemFormErrors = {};
+
+  for (const issue of issues) {
+    const field = issue.path?.[0];
+    if (!isItemFormField(field)) {
+      continue;
+    }
+    if (!nextErrors[field]) {
+      nextErrors[field] = issue.message;
+    }
+  }
+
+  return nextErrors;
+}
+
+function buildPendingImageId(file: File): string {
+  return `${file.name}-${file.size}-${file.lastModified}`;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function getStoredProjectId(): string {
@@ -201,7 +262,7 @@ function AuthScreen(props: AuthScreenProps): JSX.Element {
   );
 }
 
-interface ProjectsPageProps {
+interface ProjectsListPageProps {
   projects: Project[];
   selectedProjectId: string;
   onSelectProject: (projectId: string) => void;
@@ -210,53 +271,10 @@ interface ProjectsPageProps {
   reportNotice: ReportNotice;
 }
 
-function ProjectsPage(props: ProjectsPageProps): JSX.Element {
+function ProjectsListPage(props: ProjectsListPageProps): JSX.Element {
   const { projects, selectedProjectId, onSelectProject, refreshWorkspace, reportError, reportNotice } = props;
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-
-  async function submitProject(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-
-    if (!name.trim()) {
-      return;
-    }
-
-    try {
-      setBusy(true);
-      const project = await createProject({
-        name: name.trim(),
-        description: description.trim() || undefined
-      });
-      await refreshWorkspace(project.id);
-      setName("");
-      setDescription("");
-      reportNotice("Project created");
-    } catch (error) {
-      reportError(error, "Failed to create project");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function renameProject(project: Project): Promise<void> {
-    const nextName = window.prompt("Rename project", project.name);
-    if (!nextName) {
-      return;
-    }
-
-    try {
-      setBusy(true);
-      await updateProject(project.id, { name: nextName.trim() });
-      await refreshWorkspace(project.id);
-      reportNotice("Project updated");
-    } catch (error) {
-      reportError(error, "Failed to update project");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function removeProject(project: Project): Promise<void> {
     const confirmed = window.confirm(
@@ -286,26 +304,10 @@ function ProjectsPage(props: ProjectsPageProps): JSX.Element {
           <p className="kicker">Projects</p>
           <h2>Manage Product Contexts</h2>
         </div>
+        <button className="primary" onClick={() => navigate("/projects/new")} type="button">
+          Create Project
+        </button>
       </header>
-
-      <article className="panel-card">
-        <h3>Create Project</h3>
-        <form className="stacked-form" onSubmit={submitProject}>
-          <input
-            placeholder="Project name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <input
-            placeholder="Description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-          <button className="primary" disabled={busy} type="submit">
-            Add Project
-          </button>
-        </form>
-      </article>
 
       <article className="panel-card">
         <h3>All Projects</h3>
@@ -324,10 +326,10 @@ function ProjectsPage(props: ProjectsPageProps): JSX.Element {
                 <span>{project.name}</span>
               </label>
               <div className="inline-actions">
-                <button onClick={() => void renameProject(project)} type="button">
-                  Rename
+                <button onClick={() => navigate(`/projects/${project.id}/edit`)} type="button">
+                  Edit
                 </button>
-                <button className="danger" onClick={() => void removeProject(project)} type="button">
+                <button className="danger" disabled={busy} onClick={() => void removeProject(project)} type="button">
                   Delete
                 </button>
               </div>
@@ -339,71 +341,151 @@ function ProjectsPage(props: ProjectsPageProps): JSX.Element {
   );
 }
 
-interface CategoriesPageProps {
+interface ProjectFormPageProps {
+  projects: Project[];
+  refreshWorkspace: (preferredProjectId?: string) => Promise<void>;
+  reportError: ReportError;
+  reportNotice: ReportNotice;
+}
+
+function ProjectFormPage(props: ProjectFormPageProps): JSX.Element {
+  const { projects, refreshWorkspace, reportError, reportNotice } = props;
+  const navigate = useNavigate();
+  const { projectId } = useParams<{ projectId: string }>();
+  const isEditMode = Boolean(projectId);
+  const editingProject = useMemo(
+    () => projects.find((project) => project.id === projectId) ?? null,
+    [projectId, projects]
+  );
+
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    if (!isEditMode) {
+      setName("");
+      setDescription("");
+      return;
+    }
+
+    if (!editingProject) {
+      return;
+    }
+
+    setName(editingProject.name);
+    setDescription(editingProject.description || "");
+  }, [editingProject, isEditMode]);
+
+  async function submitProject(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+
+    if (!name.trim()) {
+      reportError(undefined, "Project name is required");
+      return;
+    }
+
+    try {
+      setBusy(true);
+
+      if (isEditMode && projectId) {
+        await updateProject(projectId, {
+          name: name.trim(),
+          description: description.trim() ? description.trim() : null
+        });
+        await refreshWorkspace(projectId);
+        reportNotice("Project updated");
+      } else {
+        const created = await createProject({
+          name: name.trim(),
+          description: description.trim() || undefined
+        });
+        await refreshWorkspace(created.id);
+        reportNotice("Project created");
+      }
+
+      navigate("/projects");
+    } catch (error) {
+      reportError(error, isEditMode ? "Failed to update project" : "Failed to create project");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (isEditMode && !editingProject) {
+    return (
+      <section className="page-section">
+        <header className="section-head">
+          <div>
+            <p className="kicker">Projects</p>
+            <h2>Project Not Found</h2>
+          </div>
+          <button onClick={() => navigate("/projects")} type="button">
+            Back to Projects
+          </button>
+        </header>
+        <article className="panel-card">
+          <p className="helper">The requested project could not be found in your current workspace.</p>
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="page-section">
+      <header className="section-head">
+        <div>
+          <p className="kicker">Projects</p>
+          <h2>{isEditMode ? "Update Project" : "Create Project"}</h2>
+        </div>
+        <button onClick={() => navigate("/projects")} type="button">
+          Back to Projects
+        </button>
+      </header>
+
+      <article className="panel-card">
+        <form className="stacked-form" onSubmit={submitProject}>
+          <label>
+            Project name
+            <input
+              placeholder="Project name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label>
+            Description
+            <input
+              placeholder="Description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </label>
+          <div className="inline-actions">
+            <button className="primary" disabled={busy} type="submit">
+              {isEditMode ? "Save Project" : "Create Project"}
+            </button>
+            <button onClick={() => navigate("/projects")} type="button">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </article>
+    </section>
+  );
+}
+
+interface CategoriesListPageProps {
   categories: Category[];
   refreshWorkspace: () => Promise<void>;
   reportError: ReportError;
   reportNotice: ReportNotice;
 }
 
-function CategoriesPage(props: CategoriesPageProps): JSX.Element {
+function CategoriesListPage(props: CategoriesListPageProps): JSX.Element {
   const { categories, refreshWorkspace, reportError, reportNotice } = props;
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState<CategoryKind>("other");
-
-  async function submitCategory(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    if (!name.trim()) {
-      return;
-    }
-
-    try {
-      setBusy(true);
-      await createCategory({
-        name: name.trim(),
-        kind
-      });
-      setName("");
-      await refreshWorkspace();
-      reportNotice("Category created");
-    } catch (error) {
-      reportError(error, "Failed to create category");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function renameCategory(category: Category): Promise<void> {
-    const nextName = window.prompt("Rename category", category.name);
-    if (!nextName) {
-      return;
-    }
-
-    try {
-      setBusy(true);
-      await updateCategory(category.id, { name: nextName.trim() });
-      await refreshWorkspace();
-      reportNotice("Category renamed");
-    } catch (error) {
-      reportError(error, "Failed to rename category");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function changeKind(category: Category, nextKind: CategoryKind): Promise<void> {
-    try {
-      setBusy(true);
-      await updateCategory(category.id, { kind: nextKind });
-      await refreshWorkspace();
-      reportNotice("Category kind updated");
-    } catch (error) {
-      reportError(error, "Failed to update category kind");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function removeCategory(category: Category): Promise<void> {
     const confirmed = window.confirm(`Delete category "${category.name}"?`);
@@ -430,28 +512,10 @@ function CategoriesPage(props: CategoriesPageProps): JSX.Element {
           <p className="kicker">Categories</p>
           <h2>Control Global Labels</h2>
         </div>
+        <button className="primary" onClick={() => navigate("/categories/new")} type="button">
+          Create Category
+        </button>
       </header>
-
-      <article className="panel-card">
-        <h3>Create Category</h3>
-        <form className="stacked-form" onSubmit={submitCategory}>
-          <input
-            placeholder="Category name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <select value={kind} onChange={(event) => setKind(event.target.value as CategoryKind)}>
-            {CATEGORY_KINDS.map((entry) => (
-              <option key={entry} value={entry}>
-                {titleize(entry)}
-              </option>
-            ))}
-          </select>
-          <button className="primary" disabled={busy} type="submit">
-            Add Category
-          </button>
-        </form>
-      </article>
 
       <article className="panel-card">
         <h3>All Categories</h3>
@@ -462,22 +526,18 @@ function CategoriesPage(props: CategoriesPageProps): JSX.Element {
             <div className="row-card" key={category.id}>
               <div className="row-title">
                 <strong>{category.name}</strong>
+                <span className="tag-chip">{titleize(category.kind)}</span>
               </div>
               <div className="inline-actions">
-                <select
-                  value={category.kind}
-                  onChange={(event) => void changeKind(category, event.target.value as CategoryKind)}
-                >
-                  {CATEGORY_KINDS.map((entry) => (
-                    <option key={entry} value={entry}>
-                      {titleize(entry)}
-                    </option>
-                  ))}
-                </select>
-                <button onClick={() => void renameCategory(category)} type="button">
-                  Rename
+                <button onClick={() => navigate(`/categories/${category.id}/edit`)} type="button">
+                  Edit
                 </button>
-                <button className="danger" onClick={() => void removeCategory(category)} type="button">
+                <button
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => void removeCategory(category)}
+                  type="button"
+                >
                   Delete
                 </button>
               </div>
@@ -489,27 +549,244 @@ function CategoriesPage(props: CategoriesPageProps): JSX.Element {
   );
 }
 
+interface CategoryFormPageProps {
+  categories: Category[];
+  refreshWorkspace: () => Promise<void>;
+  reportError: ReportError;
+  reportNotice: ReportNotice;
+}
+
+function CategoryFormPage(props: CategoryFormPageProps): JSX.Element {
+  const { categories, refreshWorkspace, reportError, reportNotice } = props;
+  const navigate = useNavigate();
+  const { categoryId } = useParams<{ categoryId: string }>();
+  const isEditMode = Boolean(categoryId);
+  const editingCategory = useMemo(
+    () => categories.find((category) => category.id === categoryId) ?? null,
+    [categoryId, categories]
+  );
+
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<CategoryKind>("other");
+
+  useEffect(() => {
+    if (!isEditMode) {
+      setName("");
+      setKind("other");
+      return;
+    }
+
+    if (!editingCategory) {
+      return;
+    }
+
+    setName(editingCategory.name);
+    setKind(editingCategory.kind);
+  }, [editingCategory, isEditMode]);
+
+  async function submitCategory(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!name.trim()) {
+      reportError(undefined, "Category name is required");
+      return;
+    }
+
+    try {
+      setBusy(true);
+      if (isEditMode && categoryId) {
+        await updateCategory(categoryId, { name: name.trim(), kind });
+        reportNotice("Category updated");
+      } else {
+        await createCategory({
+          name: name.trim(),
+          kind
+        });
+        reportNotice("Category created");
+      }
+      await refreshWorkspace();
+      navigate("/categories");
+    } catch (error) {
+      reportError(error, isEditMode ? "Failed to update category" : "Failed to create category");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (isEditMode && !editingCategory) {
+    return (
+      <section className="page-section">
+        <header className="section-head">
+          <div>
+            <p className="kicker">Categories</p>
+            <h2>Category Not Found</h2>
+          </div>
+          <button onClick={() => navigate("/categories")} type="button">
+            Back to Categories
+          </button>
+        </header>
+        <article className="panel-card">
+          <p className="helper">The requested category could not be found.</p>
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="page-section">
+      <header className="section-head">
+        <div>
+          <p className="kicker">Categories</p>
+          <h2>{isEditMode ? "Update Category" : "Create Category"}</h2>
+        </div>
+        <button onClick={() => navigate("/categories")} type="button">
+          Back to Categories
+        </button>
+      </header>
+
+      <article className="panel-card">
+        <form className="stacked-form" onSubmit={submitCategory}>
+          <label>
+            Category name
+            <input
+              placeholder="Category name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label>
+            Kind
+            <select value={kind} onChange={(event) => setKind(event.target.value as CategoryKind)}>
+              {CATEGORY_KINDS.map((entry) => (
+                <option key={entry} value={entry}>
+                  {titleize(entry)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="inline-actions">
+            <button className="primary" disabled={busy} type="submit">
+              {isEditMode ? "Save Category" : "Create Category"}
+            </button>
+            <button onClick={() => navigate("/categories")} type="button">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </article>
+    </section>
+  );
+}
+
 interface IssuesPageProps {
   selectedProjectId: string;
   selectedProjectName: string;
   categories: Category[];
   reportError: ReportError;
   reportNotice: ReportNotice;
+  mode: "list" | "form";
+}
+
+interface PendingImage {
+  id: string;
+  file: File;
+  previewUrl: string;
+}
+
+interface PreviewImageModal {
+  url: string;
+  filename: string;
+  pendingId?: string;
+  itemId?: string;
+  imageId?: string;
 }
 
 function IssuesPage(props: IssuesPageProps): JSX.Element {
-  const { selectedProjectId, selectedProjectName, categories, reportError, reportNotice } = props;
+  const { selectedProjectId, selectedProjectName, categories, reportError, reportNotice, mode } = props;
+  const navigate = useNavigate();
+  const { itemId } = useParams<{ itemId: string }>();
+  const editItemId = mode === "form" ? itemId : undefined;
   const [busy, setBusy] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [tagInput, setTagInput] = useState("");
-  const [draft, setDraft] = useState<ItemPayload>(DEFAULT_DRAFT);
+  const [draft, setDraft] = useState<ItemPayload>(() => ({
+    ...DEFAULT_DRAFT,
+    projectId: selectedProjectId,
+    categoryId: getDefaultCategoryId(categories)
+  }));
+  const [fieldErrors, setFieldErrors] = useState<ItemFormErrors>({});
+  const [isDropzoneActive, setIsDropzoneActive] = useState(false);
+  const [previewImage, setPreviewImage] = useState<PreviewImageModal | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingImagesRef = useRef<PendingImage[]>([]);
+  const isFormMode = mode === "form";
+  const isEditMode = Boolean(editItemId);
+
+  function clearFieldError(field: ItemFormField): void {
+    setFieldErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
 
   useEffect(() => {
     setDraft((current) => ({ ...current, projectId: selectedProjectId }));
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    setDraft((current) => {
+      if (editingItemId) {
+        return current;
+      }
+
+      const categoryStillExists = current.categoryId
+        ? categories.some((category) => category.id === current.categoryId)
+        : false;
+
+      if (categoryStillExists) {
+        return current;
+      }
+
+      const fallbackCategoryId = getDefaultCategoryId(categories);
+      if (current.categoryId === fallbackCategoryId) {
+        return current;
+      }
+
+      return {
+        ...current,
+        categoryId: fallbackCategoryId
+      };
+    });
+  }, [categories, editingItemId]);
+
+  useEffect(() => {
+    const previousImages = pendingImagesRef.current;
+    const currentIds = new Set(pendingImages.map((image) => image.id));
+
+    for (const image of previousImages) {
+      if (!currentIds.has(image.id)) {
+        URL.revokeObjectURL(image.previewUrl);
+      }
+    }
+
+    pendingImagesRef.current = pendingImages;
+  }, [pendingImages]);
+
+  useEffect(
+    () => () => {
+      for (const image of pendingImagesRef.current) {
+        URL.revokeObjectURL(image.previewUrl);
+      }
+    },
+    []
+  );
 
   async function refreshItems(): Promise<void> {
     if (!selectedProjectId) {
@@ -528,16 +805,143 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     }
   }
 
+  function appendPendingFiles(files: File[]): void {
+    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+
+    if (imageFiles.length === 0) {
+      return;
+    }
+
+    setPendingImages((current) => {
+      const knownIds = new Set(current.map((image) => image.id));
+      const nextImages = [...current];
+
+      for (const file of imageFiles) {
+        const id = buildPendingImageId(file);
+        if (knownIds.has(id)) {
+          continue;
+        }
+
+        nextImages.push({
+          id,
+          file,
+          previewUrl: URL.createObjectURL(file)
+        });
+        knownIds.add(id);
+      }
+
+      return nextImages;
+    });
+  }
+
+  function clearPendingImages(): void {
+    setPendingImages([]);
+    setPreviewImage((current) => (current?.pendingId ? null : current));
+  }
+
+  function removePendingImage(pendingId: string): void {
+    setPendingImages((current) => current.filter((image) => image.id !== pendingId));
+    setPreviewImage((current) => (current?.pendingId === pendingId ? null : current));
+  }
+
+  function openFilePicker(): void {
+    fileInputRef.current?.click();
+  }
+
+  function handleDropzoneDragOver(event: DragEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsDropzoneActive(true);
+  }
+
+  function handleDropzoneDragLeave(event: DragEvent<HTMLDivElement>): void {
+    const related = event.relatedTarget as Node | null;
+    if (!related || !event.currentTarget.contains(related)) {
+      setIsDropzoneActive(false);
+    }
+  }
+
+  function handleDropzoneDrop(event: DragEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    setIsDropzoneActive(false);
+    appendPendingFiles(Array.from(event.dataTransfer.files || []));
+  }
+
+  function handleDropzoneKeydown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openFilePicker();
+    }
+  }
+
+  function handleDropzonePaste(event: ClipboardEvent<HTMLDivElement>): void {
+    const imageFiles = Array.from(event.clipboardData.items || [])
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+
+    if (imageFiles.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    appendPendingFiles(imageFiles);
+    reportNotice(`${imageFiles.length} image(s) pasted from clipboard`);
+  }
+
   useEffect(() => {
     void refreshItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    if (!isFormMode) {
+      return;
+    }
+
+    if (!editItemId) {
+      if (editingItemId) {
+        resetForm();
+      }
+      return;
+    }
+
+    const targetItem = items.find((item) => item.id === editItemId);
+    if (!targetItem) {
+      return;
+    }
+
+    if (editingItemId !== editItemId) {
+      beginEdit(targetItem);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFormMode, editItemId, items, editingItemId]);
+
+  useEffect(() => {
+    if (!previewImage) {
+      return;
+    }
+
+    function onKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key === "Escape") {
+        setPreviewImage(null);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [previewImage]);
+
   function resetForm(): void {
-    setDraft({ ...DEFAULT_DRAFT, projectId: selectedProjectId });
+    setDraft({
+      ...DEFAULT_DRAFT,
+      projectId: selectedProjectId,
+      categoryId: getDefaultCategoryId(categories)
+    });
     setTagInput("");
-    setPendingFiles([]);
+    clearPendingImages();
     setEditingItemId(null);
+    setFieldErrors({});
   }
 
   function beginEdit(item: Item): void {
@@ -553,7 +957,8 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
       tags: item.tags
     });
     setTagInput(item.tags.join(", "));
-    setPendingFiles([]);
+    clearPendingImages();
+    setFieldErrors({});
   }
 
   async function submitIssue(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -564,13 +969,35 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
       return;
     }
 
-    if (!draft.title.trim() || !draft.description.trim()) {
-      reportError(new Error("Validation failed"), "Title and description are required");
+    const nextErrors: ItemFormErrors = {};
+
+    if (!draft.type) {
+      nextErrors.type = "Type is required.";
+    }
+    if (!draft.categoryId) {
+      nextErrors.categoryId =
+        categories.length === 0
+          ? "Create at least one category before creating an item."
+          : "Category is required.";
+    }
+    if (!draft.status) {
+      nextErrors.status = "Status is required.";
+    }
+    if (!draft.priority) {
+      nextErrors.priority = "Priority is required.";
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      reportError(undefined, "Please fix the highlighted fields.");
       return;
     }
 
+    setFieldErrors({});
+
     try {
       setBusy(true);
+      const wasEditing = Boolean(editingItemId);
       const payload: ItemPayload = {
         ...draft,
         projectId: selectedProjectId,
@@ -589,14 +1016,26 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
         targetId = created.id;
       }
 
-      if (targetId && pendingFiles.length > 0) {
-        await uploadItemImages(targetId, pendingFiles);
+      if (targetId && pendingImages.length > 0) {
+        await uploadItemImages(
+          targetId,
+          pendingImages.map((image) => image.file)
+        );
       }
 
       await refreshItems();
       resetForm();
-      reportNotice(editingItemId ? "Item updated" : "Item created");
+      reportNotice(wasEditing ? "Item updated" : "Item created");
+      if (isFormMode) {
+        navigate("/issues");
+      }
     } catch (error) {
+      if (error instanceof ApiError && error.issues.length > 0) {
+        const mappedErrors = mapItemFormIssues(error.issues);
+        if (Object.keys(mappedErrors).length > 0) {
+          setFieldErrors((current) => ({ ...current, ...mappedErrors }));
+        }
+      }
       reportError(error, "Failed to save item");
     } finally {
       setBusy(false);
@@ -604,7 +1043,8 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   }
 
   async function removeItem(item: Item): Promise<void> {
-    const confirmed = window.confirm(`Delete ${item.type} "${item.title}"?`);
+    const itemLabel = item.title.trim() || "Untitled item";
+    const confirmed = window.confirm(`Delete ${item.type} "${itemLabel}"?`);
     if (!confirmed) {
       return;
     }
@@ -628,6 +1068,9 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     try {
       setBusy(true);
       await deleteItemImage(itemId, imageId);
+      setPreviewImage((current) =>
+        current?.itemId === itemId && current.imageId === imageId ? null : current
+      );
       await refreshItems();
       reportNotice("Image removed");
     } catch (error) {
@@ -648,191 +1091,397 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     );
   }
 
+  const missingEditTarget =
+    isFormMode &&
+    isEditMode &&
+    !loadingItems &&
+    !items.some((item) => item.id === editItemId);
+
   return (
-    <section className="page-section">
-      <header className="section-head">
-        <div>
-          <p className="kicker">Issues & Features</p>
-          <h2>{selectedProjectName}</h2>
-        </div>
-      </header>
-
-      <article className="panel-card">
-        <h3>{editingItemId ? "Edit Item" : "Create Item"}</h3>
-        <form className="stacked-form" onSubmit={submitIssue}>
-          <div className="grid-two">
-            <label>
-              Type
-              <select
-                value={draft.type}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, type: event.target.value as ItemType }))
-                }
-              >
-                {ITEM_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {titleize(type)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Category
-              <select
-                value={draft.categoryId || ""}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    categoryId: event.target.value || null
-                  }))
-                }
-              >
-                <option value="">Uncategorized</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+    <>
+      <section className="page-section">
+        <header className="section-head">
+          <div>
+            <p className="kicker">Issues & Features</p>
+            <h2>{isFormMode ? (isEditMode ? "Update Item" : "Create Item") : selectedProjectName}</h2>
           </div>
-
-          <label>
-            Title
-            <input
-              placeholder="Short headline"
-              value={draft.title}
-              onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-            />
-          </label>
-
-          <label>
-            Description
-            <textarea
-              placeholder="What happened?"
-              rows={5}
-              value={draft.description}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, description: event.target.value }))
-              }
-            />
-          </label>
-
-          <div className="grid-three">
-            <label>
-              Status
-              <select
-                value={draft.status}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, status: event.target.value as ItemStatus }))
-                }
-              >
-                {ITEM_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {titleize(status)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Priority
-              <select
-                value={draft.priority}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, priority: event.target.value as ItemPriority }))
-                }
-              >
-                {ITEM_PRIORITIES.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {titleize(priority)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Tags
-              <input
-                placeholder="ios, checkout"
-                value={tagInput}
-                onChange={(event) => setTagInput(event.target.value)}
-              />
-            </label>
-          </div>
-
-          <label>
-            Screenshots
-            <input
-              accept="image/*"
-              capture="environment"
-              multiple
-              type="file"
-              onChange={(event) => {
-                const files = Array.from(event.target.files || []);
-                setPendingFiles(files);
-              }}
-            />
-          </label>
-
-          <div className="inline-actions">
-            <button className="primary" disabled={busy} type="submit">
-              {editingItemId ? "Save" : "Create"}
+          {isFormMode ? (
+            <button onClick={() => navigate("/issues")} type="button">
+              Back to Issues
             </button>
-            {editingItemId && (
-              <button onClick={resetForm} type="button">
-                Cancel Edit
-              </button>
-            )}
-          </div>
-        </form>
-      </article>
+          ) : (
+            <button className="primary" onClick={() => navigate("/issues/new")} type="button">
+              Create Item
+            </button>
+          )}
+        </header>
 
-      <article className="panel-card">
-        <h3>Current Items</h3>
-        {loadingItems && <p className="helper">Loading items...</p>}
-        {!loadingItems && items.length === 0 && <p className="helper">No issues/features recorded yet.</p>}
-
-        <div className="item-grid">
-          {items.map((item) => (
-            <article className="item-tile" key={item.id}>
-              <div className="item-top">
-                <h4>{item.title}</h4>
-                <span className="tag-chip">{titleize(item.type)}</span>
-              </div>
-              <p>{item.description}</p>
-              <div className="meta-line">
-                <span>{titleize(item.status)}</span>
-                <span>{titleize(item.priority)}</span>
-                <span>{item.tags.length ? item.tags.join(", ") : "no tags"}</span>
-              </div>
-
-              {item.images.length > 0 && (
-                <div className="thumb-grid">
-                  {item.images.map((image) => (
-                    <figure key={image.id}>
-                      <img alt={image.filename} loading="lazy" src={image.url} />
-                      <button className="danger" onClick={() => void removeImage(item.id, image.id)} type="button">
-                        Remove
-                      </button>
-                    </figure>
+        {isFormMode && (
+          <article className="panel-card">
+            <h3>{isEditMode ? "Update Item" : "Create Item"}</h3>
+            <form className="stacked-form" onSubmit={submitIssue}>
+            <div className="grid-two">
+              <label className={fieldErrors.type ? "field-with-error" : ""}>
+                Type *
+                <select
+                  aria-invalid={Boolean(fieldErrors.type)}
+                  value={draft.type}
+                  onChange={(event) => {
+                    setDraft((current) => ({ ...current, type: event.target.value as ItemType }));
+                    clearFieldError("type");
+                  }}
+                >
+                  {ITEM_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {titleize(type)}
+                    </option>
                   ))}
+                </select>
+                {fieldErrors.type && <span className="field-error">{fieldErrors.type}</span>}
+              </label>
+              <label className={fieldErrors.categoryId ? "field-with-error" : ""}>
+                Category *
+                <select
+                  aria-invalid={Boolean(fieldErrors.categoryId)}
+                  value={draft.categoryId || ""}
+                  onChange={(event) => {
+                    setDraft((current) => ({
+                      ...current,
+                      categoryId: event.target.value || null
+                    }));
+                    clearFieldError("categoryId");
+                  }}
+                >
+                  <option value="" disabled>
+                    {categories.length === 0 ? "No categories available" : "Select category"}
+                  </option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.categoryId && <span className="field-error">{fieldErrors.categoryId}</span>}
+              </label>
+            </div>
+
+            <label className={fieldErrors.title ? "field-with-error" : ""}>
+              Title
+              <input
+                aria-invalid={Boolean(fieldErrors.title)}
+                placeholder="Short headline"
+                value={draft.title}
+                onChange={(event) => {
+                  setDraft((current) => ({ ...current, title: event.target.value }));
+                  clearFieldError("title");
+                }}
+              />
+              {fieldErrors.title && <span className="field-error">{fieldErrors.title}</span>}
+            </label>
+
+            <label className={fieldErrors.description ? "field-with-error" : ""}>
+              Description
+              <textarea
+                aria-invalid={Boolean(fieldErrors.description)}
+                placeholder="What happened?"
+                rows={5}
+                value={draft.description}
+                onChange={(event) => {
+                  setDraft((current) => ({ ...current, description: event.target.value }));
+                  clearFieldError("description");
+                }}
+              />
+              {fieldErrors.description && (
+                <span className="field-error">{fieldErrors.description}</span>
+              )}
+            </label>
+
+            <div className="grid-three">
+              <label className={fieldErrors.status ? "field-with-error" : ""}>
+                Status *
+                <select
+                  aria-invalid={Boolean(fieldErrors.status)}
+                  value={draft.status}
+                  onChange={(event) => {
+                    setDraft((current) => ({ ...current, status: event.target.value as ItemStatus }));
+                    clearFieldError("status");
+                  }}
+                >
+                  {ITEM_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {titleize(status)}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.status && <span className="field-error">{fieldErrors.status}</span>}
+              </label>
+
+              <label className={fieldErrors.priority ? "field-with-error" : ""}>
+                Priority *
+                <select
+                  aria-invalid={Boolean(fieldErrors.priority)}
+                  value={draft.priority}
+                  onChange={(event) => {
+                    setDraft((current) => ({ ...current, priority: event.target.value as ItemPriority }));
+                    clearFieldError("priority");
+                  }}
+                >
+                  {ITEM_PRIORITIES.map((priority) => (
+                    <option key={priority} value={priority}>
+                      {titleize(priority)}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.priority && <span className="field-error">{fieldErrors.priority}</span>}
+              </label>
+
+              <label>
+                Tags
+                <input
+                  placeholder="ios, checkout"
+                  value={tagInput}
+                  onChange={(event) => setTagInput(event.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="screenshot-field">
+              <label>Screenshots</label>
+              <input
+                ref={fileInputRef}
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                multiple
+                type="file"
+                onChange={(event) => {
+                  appendPendingFiles(Array.from(event.target.files || []));
+                  event.target.value = "";
+                }}
+              />
+              <div
+                aria-label="Screenshot dropzone"
+                className={isDropzoneActive ? "dropzone active" : "dropzone"}
+                onDragLeave={handleDropzoneDragLeave}
+                onDragOver={handleDropzoneDragOver}
+                onDrop={handleDropzoneDrop}
+                onKeyDown={handleDropzoneKeydown}
+                onPaste={handleDropzonePaste}
+                onClick={(event) => event.currentTarget.focus()}
+                role="button"
+                tabIndex={0}
+              >
+                <p className="dropzone-title">Drop screenshots here</p>
+                <p className="helper">
+                  Tap choose for file/camera, or focus here and paste image from clipboard (Ctrl/Cmd+V).
+                </p>
+              </div>
+              <div className="inline-actions">
+                <button onClick={openFilePicker} type="button">
+                  Choose Screenshots
+                </button>
+                {pendingImages.length > 0 && (
+                  <button onClick={clearPendingImages} type="button">
+                    Clear Queue
+                  </button>
+                )}
+              </div>
+
+              {pendingImages.length > 0 && (
+                <div className="pending-upload-panel">
+                  <div className="pending-upload-head">
+                    <h4>Pending Uploads ({pendingImages.length})</h4>
+                    <p className="helper">Images upload when you save this item.</p>
+                  </div>
+                  <div className="media-preview-grid">
+                    {pendingImages.map((image) => (
+                      <article className="media-preview-card" key={image.id}>
+                        <button
+                          className="media-thumb"
+                          onClick={() =>
+                            setPreviewImage({
+                              url: image.previewUrl,
+                              filename: image.file.name,
+                              pendingId: image.id
+                            })
+                          }
+                          type="button"
+                        >
+                          <img alt={image.file.name} loading="lazy" src={image.previewUrl} />
+                        </button>
+                        <div className="media-card-meta">
+                          <strong title={image.file.name}>{image.file.name}</strong>
+                          <span>{formatFileSize(image.file.size)}</span>
+                        </div>
+                        <div className="inline-actions">
+                          <button
+                            onClick={() =>
+                              setPreviewImage({
+                                url: image.previewUrl,
+                                filename: image.file.name,
+                                pendingId: image.id
+                              })
+                            }
+                            type="button"
+                          >
+                            Preview
+                          </button>
+                          <button className="danger" onClick={() => removePendingImage(image.id)} type="button">
+                            Remove
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
                 </div>
               )}
+            </div>
 
               <div className="inline-actions">
-                <button onClick={() => beginEdit(item)} type="button">
-                  Edit
+                <button className="primary" disabled={busy} type="submit">
+                  {isEditMode ? "Save Item" : "Create Item"}
                 </button>
-                <button className="danger" onClick={() => void removeItem(item)} type="button">
-                  Delete
+                <button onClick={() => navigate("/issues")} type="button">
+                  Cancel
                 </button>
               </div>
-            </article>
-          ))}
+            </form>
+            {missingEditTarget && (
+              <p className="helper">Could not find this item in the currently selected project.</p>
+            )}
+          </article>
+        )}
+
+        {!isFormMode && (
+          <article className="panel-card">
+            <h3>Current Items</h3>
+            {loadingItems && <p className="helper">Loading items...</p>}
+            {!loadingItems && items.length === 0 && <p className="helper">No issues/features recorded yet.</p>}
+
+            <div className="item-grid">
+              {items.map((item) => (
+                <article className="item-tile" key={item.id}>
+                  <div className="item-top">
+                    <h4>{item.title || "Untitled item"}</h4>
+                    <span className="tag-chip">{titleize(item.type)}</span>
+                  </div>
+                  <p>{item.description || "No description provided."}</p>
+                  <div className="meta-line">
+                    <span>{titleize(item.status)}</span>
+                    <span>{titleize(item.priority)}</span>
+                    <span>{item.tags.length ? item.tags.join(", ") : "no tags"}</span>
+                  </div>
+
+                  {item.images.length > 0 && (
+                    <div className="thumb-grid">
+                      {item.images.map((image) => (
+                        <figure key={image.id}>
+                          <button
+                            className="thumb-action"
+                            onClick={() =>
+                              setPreviewImage({
+                                url: image.url,
+                                filename: image.filename,
+                                itemId: item.id,
+                                imageId: image.id
+                              })
+                            }
+                            type="button"
+                          >
+                            <img alt={image.filename} loading="lazy" src={image.url} />
+                          </button>
+                          <div className="inline-actions">
+                            <button
+                              onClick={() =>
+                                setPreviewImage({
+                                  url: image.url,
+                                  filename: image.filename,
+                                  itemId: item.id,
+                                  imageId: image.id
+                                })
+                              }
+                              type="button"
+                            >
+                              Preview
+                            </button>
+                            <button
+                              className="danger"
+                              onClick={() => void removeImage(item.id, image.id)}
+                              type="button"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </figure>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="inline-actions">
+                    <button onClick={() => navigate(`/issues/${item.id}/edit`)} type="button">
+                      Edit
+                    </button>
+                    <button className="danger" onClick={() => void removeItem(item)} type="button">
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </article>
+        )}
+      </section>
+
+      {previewImage && (
+        <div
+          aria-label="Image preview"
+          aria-modal="true"
+          className="image-modal-backdrop"
+          onClick={() => setPreviewImage(null)}
+          role="dialog"
+        >
+          <article className="image-modal" onClick={(event) => event.stopPropagation()}>
+            <header className="image-modal-head">
+              <strong title={previewImage.filename}>{previewImage.filename}</strong>
+              <button onClick={() => setPreviewImage(null)} type="button">
+                Close
+              </button>
+            </header>
+            <img alt={previewImage.filename} src={previewImage.url} />
+            <div className="inline-actions">
+              {previewImage.pendingId ? (
+                <button
+                  className="danger"
+                  onClick={() => {
+                    if (previewImage.pendingId) {
+                      removePendingImage(previewImage.pendingId);
+                    }
+                  }}
+                  type="button"
+                >
+                  Remove from Queue
+                </button>
+              ) : (
+                <button
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!previewImage.itemId || !previewImage.imageId) {
+                      return;
+                    }
+
+                    void removeImage(previewImage.itemId, previewImage.imageId);
+                  }}
+                  type="button"
+                >
+                  Remove from Item
+                </button>
+              )}
+            </div>
+          </article>
         </div>
-      </article>
-    </section>
+      )}
+    </>
   );
 }
 
@@ -1257,7 +1906,7 @@ function AppShell(props: ShellProps): JSX.Element {
             <Route
               path="/projects"
               element={
-                <ProjectsPage
+                <ProjectsListPage
                   projects={projects}
                   selectedProjectId={selectedProjectId}
                   onSelectProject={setSelectedProjectId}
@@ -1268,9 +1917,53 @@ function AppShell(props: ShellProps): JSX.Element {
               }
             />
             <Route
+              path="/projects/new"
+              element={
+                <ProjectFormPage
+                  projects={projects}
+                  refreshWorkspace={refreshWorkspace}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
+            <Route
+              path="/projects/:projectId/edit"
+              element={
+                <ProjectFormPage
+                  projects={projects}
+                  refreshWorkspace={refreshWorkspace}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
+            <Route
               path="/categories"
               element={
-                <CategoriesPage
+                <CategoriesListPage
+                  categories={categories}
+                  refreshWorkspace={async () => refreshWorkspace()}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
+            <Route
+              path="/categories/new"
+              element={
+                <CategoryFormPage
+                  categories={categories}
+                  refreshWorkspace={async () => refreshWorkspace()}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
+            <Route
+              path="/categories/:categoryId/edit"
+              element={
+                <CategoryFormPage
                   categories={categories}
                   refreshWorkspace={async () => refreshWorkspace()}
                   reportError={reportError}
@@ -1283,6 +1976,33 @@ function AppShell(props: ShellProps): JSX.Element {
               element={
                 <IssuesPage
                   categories={categories}
+                  mode="list"
+                  selectedProjectId={selectedProjectId}
+                  selectedProjectName={selectedProject?.name || "No Project"}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
+            <Route
+              path="/issues/new"
+              element={
+                <IssuesPage
+                  categories={categories}
+                  mode="form"
+                  selectedProjectId={selectedProjectId}
+                  selectedProjectName={selectedProject?.name || "No Project"}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
+            <Route
+              path="/issues/:itemId/edit"
+              element={
+                <IssuesPage
+                  categories={categories}
+                  mode="form"
                   selectedProjectId={selectedProjectId}
                   selectedProjectName={selectedProject?.name || "No Project"}
                   reportError={reportError}
@@ -1346,13 +2066,42 @@ export default function App(): JSX.Element {
   }
 
   function resolveApiError(error: unknown, fallbackMessage: string): string {
-    const message = error instanceof Error ? error.message : fallbackMessage;
+    if (error instanceof ApiError && error.status === 401) {
+      clearAuthToken();
+      setCurrentUser(null);
+      resetWorkspaceState();
+      return "Session expired. Please sign in again.";
+    }
 
+    if (error instanceof ApiError) {
+      if (error.issues.length > 0) {
+        const issueMessage = error.issues
+          .map((issue) => issue.message.trim())
+          .filter(Boolean)
+          .join(" ");
+
+        if (issueMessage) {
+          return issueMessage;
+        }
+      }
+
+      if (error.message && error.message.toLowerCase() !== "validation failed") {
+        return error.message;
+      }
+
+      return fallbackMessage;
+    }
+
+    const message = error instanceof Error ? error.message : "";
     if (message.toLowerCase().includes("unauthorized")) {
       clearAuthToken();
       setCurrentUser(null);
       resetWorkspaceState();
       return "Session expired. Please sign in again.";
+    }
+
+    if (!message || message.toLowerCase() === "validation failed") {
+      return fallbackMessage;
     }
 
     return message;

@@ -1,10 +1,14 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { z } from "zod";
 
+const apiRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const workspaceRootDir = path.resolve(apiRootDir, "../..");
+
 const envCandidates = [
-  path.resolve(process.cwd(), ".env"),
-  path.resolve(process.cwd(), "../../.env")
+  path.resolve(apiRootDir, ".env"),
+  path.resolve(workspaceRootDir, ".env")
 ];
 
 for (const envPath of envCandidates) {
@@ -15,7 +19,7 @@ const schema = z.object({
   NODE_ENV: z.string().optional().default("development"),
   PORT: z.coerce.number().optional().default(4000),
   DATABASE_URL: z.string().min(1),
-  UPLOAD_DIR: z.string().optional().default("./uploads"),
+  UPLOAD_DIR: z.string().optional(),
   MAX_UPLOAD_MB: z.coerce.number().optional().default(8),
   CORS_ORIGIN: z.string().optional().default("http://localhost:5173"),
   JWT_SECRET: z.string().optional().default("change-me-in-production"),
@@ -26,14 +30,29 @@ const schema = z.object({
 });
 
 const parsed = schema.parse(process.env);
+const defaultUploadDir = parsed.NODE_ENV === "production" ? "/data/uploads" : "./uploads";
+const uploadDir = resolveUploadDir(parsed.UPLOAD_DIR || defaultUploadDir);
+
+function resolveUploadDir(rawUploadDir: string): string {
+  if (path.isAbsolute(rawUploadDir)) {
+    return rawUploadDir;
+  }
+
+  const normalized = rawUploadDir.replace(/\\/g, "/").replace(/^\.\//, "");
+
+  // Backward compatibility: older env files used "./apps/api/uploads" from workspace root.
+  if (normalized.startsWith("apps/api/")) {
+    return path.resolve(workspaceRootDir, normalized);
+  }
+
+  return path.resolve(apiRootDir, rawUploadDir);
+}
 
 export const env = {
   nodeEnv: parsed.NODE_ENV,
   port: parsed.PORT,
   databaseUrl: parsed.DATABASE_URL,
-  uploadDir: path.isAbsolute(parsed.UPLOAD_DIR)
-    ? parsed.UPLOAD_DIR
-    : path.resolve(process.cwd(), parsed.UPLOAD_DIR),
+  uploadDir,
   maxUploadBytes: parsed.MAX_UPLOAD_MB * 1024 * 1024,
   corsOrigins: parsed.CORS_ORIGIN.split(",").map((origin) => origin.trim()),
   jwtSecret: parsed.JWT_SECRET,
