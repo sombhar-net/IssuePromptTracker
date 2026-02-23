@@ -78,3 +78,6 @@ When making changes, append an entry to **Change Log** below with:
   - `npm run test`
   - `npm run build`
   - login/auth API smoke checks
+- Normalized `docker-compose.yml` environment placeholders to sane defaults (`:-`) for smoother local/Coolify setup.
+- Added Postgres variables to `.env.example` (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST_PORT`).
+- Expanded Coolify deployment docs in `README.md` with explicit Postgres + API env variable examples and required persistent volume mounts.

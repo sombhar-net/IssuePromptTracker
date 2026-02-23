@@ -3,16 +3,16 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: aamtracker
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
+      POSTGRES_DB: ${POSTGRES_DB:-aamtracker}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d aamtracker"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-aamtracker}"]
       interval: 10s
       timeout: 5s
       retries: 5
     ports:
-      - "55432:5432"
+      - "${POSTGRES_HOST_PORT:-55432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -23,16 +23,16 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      PORT: 4000
-      DATABASE_URL: postgresql://app:app@postgres:5432/aamtracker?schema=public
+      PORT: ${API_PORT:-4000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@postgres:5432/aamtracker?schema=public}
       UPLOAD_DIR: /data/uploads
-      MAX_UPLOAD_MB: 8
-      CORS_ORIGIN: "*"
-      JWT_SECRET: change-me-in-production
-      JWT_EXPIRES_IN: 7d
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: Admin123!
-      ADMIN_NAME: Admin
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-8}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin123!}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,7 +49,7 @@ services:
     depends_on:
       - api
     ports:
-      - "3000:80"
+      - "${WEB_HOST_PORT:-3000}:80"
 
 volumes:
   postgres_data:

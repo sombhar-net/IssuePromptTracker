@@ -81,18 +81,29 @@ Then open `http://localhost:3000`.
 1. Push this repo to GitHub/GitLab.
 2. In Coolify, create a new **Docker Compose** application from this repo.
 3. Set branch (for example `main`) and enable auto-deploy on push.
-4. Set required env vars in Coolify (can override defaults):
-- `DATABASE_URL`
-- `UPLOAD_DIR=/data/uploads`
-- `MAX_UPLOAD_MB=8`
-- `CORS_ORIGIN=*`
-- `JWT_SECRET`
-- `JWT_EXPIRES_IN`
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
-- `ADMIN_NAME`
-5. Attach a persistent volume to `/data/uploads` on the `api` service.
+4. In Coolify app settings, open **Environment Variables** and set:
+- Postgres service vars:
+  - `POSTGRES_DB=aamtracker`
+  - `POSTGRES_USER=app`
+  - `POSTGRES_PASSWORD=<strong-password>`
+- API vars:
+  - `DATABASE_URL=postgresql://app:<strong-password>@postgres:5432/aamtracker?schema=public`
+  - `UPLOAD_DIR=/data/uploads`
+  - `MAX_UPLOAD_MB=8`
+  - `CORS_ORIGIN=*` (or your domain)
+  - `JWT_SECRET=<long-random-secret>`
+  - `JWT_EXPIRES_IN=7d`
+  - `ADMIN_EMAIL=admin@example.com`
+  - `ADMIN_PASSWORD=<strong-admin-password>`
+  - `ADMIN_NAME=Admin`
+5. Attach persistent volumes:
+- `postgres` service -> `/var/lib/postgresql/data`
+- `api` service -> `/data/uploads`
 6. Deploy once manually; next pushes auto-deploy.
+
+Important:
+- Inside Coolify/docker network, DB host must be `postgres` (the compose service name), not `localhost`.
+- If you change `POSTGRES_DB`, `POSTGRES_USER`, or `POSTGRES_PASSWORD`, update `DATABASE_URL` to match exactly.
 
 ## API endpoints (high-level)
 - `/api/auth/register`
