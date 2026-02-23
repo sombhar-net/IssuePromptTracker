@@ -870,6 +870,50 @@ app.patch("/api/items/:id", async (request, reply) => {
   });
 });
 
+app.patch("/api/items/:id/status", async (request, reply) => {
+  const authUser = getAuthUser(request);
+  const params = z.object({ id: z.string().min(1) }).parse(request.params);
+  const body = z
+    .object({
+      status: itemStatusSchema
+    })
+    .parse(request.body);
+
+  const existing = await prisma.item.findFirst({
+    where: {
+      id: params.id,
+      ...itemAccessWhere(authUser)
+    },
+    select: { id: true }
+  });
+
+  if (!existing) {
+    return reply.status(404).send({ message: "Item not found" });
+  }
+
+  const item = await prisma.item.update({
+    where: { id: params.id },
+    data: {
+      status: body.status
+    },
+    include: {
+      project: true,
+      category: true,
+      images: {
+        orderBy: { sortOrder: "asc" }
+      }
+    }
+  });
+
+  return {
+    ...item,
+    images: item.images.map((image) => ({
+      ...image,
+      url: imagePublicUrl(image.relativePath)
+    }))
+  };
+});
+
 app.delete("/api/items/:id", async (request, reply) => {
   const authUser = getAuthUser(request);
   const params = z.object({ id: z.string().min(1) }).parse(request.params);

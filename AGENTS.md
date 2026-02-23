@@ -82,8 +82,15 @@ When making changes, append an entry to **Change Log** below with:
   - `npm run test`
   - `npm run build`
 - Fixed issue form UX regression on `/issues/:itemId/edit`:
-  - existing saved screenshots are now displayed in the Details tab (not only newly queued files)
-  - added preview/remove actions for saved screenshots directly from the edit/manage form
+  - existing saved screenshots now render in the Details tab (not just newly queued images)
+  - added preview/remove controls for saved screenshots directly from the edit/manage form
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- Added reusable screenshot copy UI component and wired it into both prompt workflows:
+  - issue form Prompt tab now shows per-screenshot copy buttons
+  - `/prompts` page now shows per-screenshot copy buttons for the selected item (same component reused)
+  - screenshot list is rendered before prompt textarea on `/prompts` for immediate visibility
 - Migration/env impact: none.
 - Verification performed:
   - `npm run build -w apps/web`
@@ -194,6 +201,24 @@ When making changes, append an entry to **Change Log** below with:
 - Improved unauthenticated page responsiveness:
   - two-column desktop hero + auth card layout
   - stacked mobile layout with tighter spacing and touch-friendly CTA sizing
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- Expanded item management on `/issues` (items list view) with full filtering controls:
+  - filters for `search`, `type`, `status`, `priority`, `category`, and `tag`
+  - clear-filters action to reset list filters in one click
+- Added quick item status action buttons on each list card (`open`, `in progress`, `resolved`, `archived`).
+- Added dedicated shared API endpoint for status changes (used for both issues and features):
+  - `PATCH /api/items/:id/status` with body `{ "status": "<itemStatus>" }`
+- Updated web API client with `updateItemStatus()` and wired list actions to the dedicated status endpoint.
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/api`
+  - `npm run build -w apps/web`
+  - `npm run test`
+- Updated item card actions in `/issues` list view:
+  - moved item-level `Edit` and `Delete` controls from bottom row to the top card header beside the item type chip
+  - kept screenshot preview/remove controls unchanged inside the image block
 - Migration/env impact: none.
 - Verification performed:
   - `npm run build -w apps/web`

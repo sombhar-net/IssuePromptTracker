@@ -7,6 +7,7 @@ import type {
   Item,
   ItemFilters,
   ItemPayload,
+  ItemStatus,
   PromptTemplateSet,
   PromptTemplatesResponse,
   Project,
@@ -284,6 +285,13 @@ export async function updateItem(id: string, payload: Partial<ItemPayload>): Pro
   return request<Item>(`/items/${id}`, {
     method: "PATCH",
     body: JSON.stringify(payload)
+  });
+}
+
+export async function updateItemStatus(id: string, status: ItemStatus): Promise<Item> {
+  return request<Item>(`/items/${id}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
   });
 }
 

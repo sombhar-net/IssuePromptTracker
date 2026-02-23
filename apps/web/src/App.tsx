@@ -41,6 +41,7 @@ import {
   register as registerUser,
   updateCategory,
   updateItem,
+  updateItemStatus,
   updatePromptTemplates,
   updateProject,
   uploadItemImages
@@ -155,6 +156,82 @@ function formatFileSize(bytes: number): string {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Failed to read image blob"));
+    };
+    reader.onerror = () => reject(reader.error || new Error("Failed to read image blob"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function writeEmbeddedImageHtmlClipboard(
+  promptText: string,
+  imageBlobs: Blob[]
+): Promise<void> {
+  const imageDataUrls = await Promise.all(imageBlobs.map((blob) => blobToDataUrl(blob)));
+  const html = [
+    "<div>",
+    `<p>${escapeHtml(promptText).replaceAll("\n", "<br />")}</p>`,
+    ...imageDataUrls.map(
+      (url, index) =>
+        `<p><img alt="image-${index + 1}" src="${url}" style="max-width:100%;height:auto;" /></p>`
+    ),
+    "</div>"
+  ].join("");
+
+  const clipboardItem = new ClipboardItem({
+    "text/plain": new Blob([promptText], { type: "text/plain" }),
+    "text/html": new Blob([html], { type: "text/html" })
+  });
+
+  await navigator.clipboard.write([clipboardItem]);
+}
+
+function supportsImageClipboard(): boolean {
+  return typeof navigator !== "undefined" && Boolean(navigator.clipboard?.write) && typeof ClipboardItem !== "undefined";
+}
+
+async function fetchClipboardImageBlob(image: Item["images"][number]): Promise<Blob> {
+  const response = await fetch(image.url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image ${image.filename}`);
+  }
+
+  const blob = await response.blob();
+  const buffer = await blob.arrayBuffer();
+  const mimeType =
+    blob.type.startsWith("image/") || image.mimeType.startsWith("image/")
+      ? blob.type || image.mimeType
+      : "image/png";
+
+  return new Blob([buffer], { type: mimeType });
+}
+
+async function copySingleImageToClipboard(image: Item["images"][number]): Promise<void> {
+  const blob = await fetchClipboardImageBlob(image);
+  await navigator.clipboard.write([
+    new ClipboardItem({
+      [blob.type || "image/png"]: blob
+    })
+  ]);
 }
 
 function getStoredProjectId(): string {
@@ -997,6 +1074,50 @@ interface PreviewImageModal {
   imageId?: string;
 }
 
+interface ScreenshotCopyListProps {
+  title: string;
+  helper: string;
+  images: Item["images"];
+  busy: boolean;
+  onCopy: (image: Item["images"][number]) => void;
+}
+
+function ScreenshotCopyList(props: ScreenshotCopyListProps): JSX.Element | null {
+  const { title, helper, images, busy, onCopy } = props;
+
+  if (images.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="prompt-image-list">
+      <h4>
+        {title} ({images.length})
+      </h4>
+      <p className="helper">{helper}</p>
+      <div className="prompt-image-chips">
+        {images.map((image) => (
+          <div className="prompt-image-chip" key={image.id}>
+            <span className="tag-chip" title={image.filename}>
+              {image.filename}
+            </span>
+            <button
+              aria-label={`Copy screenshot ${image.filename}`}
+              className="icon-button"
+              disabled={busy}
+              onClick={() => onCopy(image)}
+              title="Copy screenshot"
+              type="button"
+            >
+              <AppIcon name="copy" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function IssuesPage(props: IssuesPageProps): JSX.Element {
   const { selectedProjectId, selectedProjectName, categories, reportError, reportNotice, mode } = props;
   const navigate = useNavigate();
@@ -1020,6 +1141,10 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   const [issuePromptText, setIssuePromptText] = useState("");
   const [issuePromptFallback, setIssuePromptFallback] = useState("");
   const [promptBusy, setPromptBusy] = useState(false);
+  const [listFilters, setListFilters] = useState<ItemFilters>({
+    search: ""
+  });
+  const [statusUpdatingItemId, setStatusUpdatingItemId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImagesRef = useRef<PendingImage[]>([]);
   const isFormMode = mode === "form";
@@ -1101,10 +1226,10 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
 
     try {
       setLoadingItems(true);
-      const nextItems = await getItems(selectedProjectId);
+      const nextItems = await getItems(selectedProjectId, isFormMode ? {} : listFilters);
       setItems(nextItems);
     } catch (error) {
-      reportError(error, "Failed to load issues/features");
+      reportError(error, "Failed to load items");
     } finally {
       setLoadingItems(false);
     }
@@ -1197,7 +1322,7 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   useEffect(() => {
     void refreshItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProjectId]);
+  }, [selectedProjectId, isFormMode, listFilters]);
 
   useEffect(() => {
     if (!isFormMode) {
@@ -1430,6 +1555,23 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     }
   }
 
+  async function copyIssueScreenshot(image: Item["images"][number]): Promise<void> {
+    if (!supportsImageClipboard()) {
+      reportNotice("Image clipboard is not supported in this browser.");
+      return;
+    }
+
+    try {
+      setPromptBusy(true);
+      await copySingleImageToClipboard(image);
+      reportNotice(`Copied screenshot: ${image.filename}`);
+    } catch (error) {
+      reportError(error, "Failed to copy screenshot");
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
   function resetForm(): void {
     setDraft({
       ...DEFAULT_DRAFT,
@@ -1584,12 +1726,33 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     }
   }
 
+  async function changeItemStatus(item: Item, status: ItemStatus): Promise<void> {
+    if (item.status === status) {
+      return;
+    }
+
+    try {
+      setStatusUpdatingItemId(item.id);
+      await updateItemStatus(item.id, status);
+      await refreshItems();
+      reportNotice(`Status updated to ${titleize(status)}`);
+    } catch (error) {
+      reportError(error, "Failed to update item status");
+    } finally {
+      setStatusUpdatingItemId((current) => (current === item.id ? null : current));
+    }
+  }
+
+  function resetListFilters(): void {
+    setListFilters({ search: "" });
+  }
+
   if (!selectedProjectId) {
     return (
       <section className="page-section">
         <article className="panel-card">
           <h2>No Project Selected</h2>
-          <p className="helper">Create/select a project on the Projects page to start adding issues.</p>
+          <p className="helper">Create/select a project on the Projects page to start adding items.</p>
         </article>
       </section>
     );
@@ -1600,6 +1763,14 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     isEditMode &&
     !loadingItems &&
     !items.some((item) => item.id === editItemId);
+  const hasActiveListFilters = Boolean(
+    listFilters.search ||
+      listFilters.type ||
+      listFilters.status ||
+      listFilters.priority ||
+      listFilters.categoryId ||
+      listFilters.tag
+  );
 
   return (
     <>
@@ -2010,20 +2181,14 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                       </div>
                     )}
 
-                    {promptItem && promptItem.images.length > 0 && (
-                      <div className="prompt-image-list">
-                        <h4>Saved Images ({promptItem.images.length})</h4>
-                        <p className="helper">
-                          These images are included in prompt downloads and used by copy-with-images.
-                        </p>
-                        <div className="prompt-image-chips">
-                          {promptItem.images.map((image) => (
-                            <span className="tag-chip" key={image.id} title={image.filename}>
-                              {image.filename}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                    {promptItem && (
+                      <ScreenshotCopyList
+                        busy={promptBusy}
+                        helper="These images are included in prompt downloads and used by copy-with-images."
+                        images={promptItem.images}
+                        onCopy={(image) => void copyIssueScreenshot(image)}
+                        title="Saved Images"
+                      />
                     )}
                   </>
                 )}
@@ -2038,22 +2203,189 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
 
         {!isFormMode && (
           <article className="panel-card">
-            <h3>Current Items</h3>
+            <div className="section-head">
+              <div>
+                <h3>Current Items</h3>
+                <p className="helper">Filter by status, priority, type, category, tags, or text.</p>
+              </div>
+              <button
+                className="button-with-icon"
+                disabled={!hasActiveListFilters}
+                onClick={resetListFilters}
+                type="button"
+              >
+                <AppIcon name="reset" />
+                Clear Filters
+              </button>
+            </div>
+
+            <div className="grid-three issue-filters-grid">
+              <label>
+                Search
+                <input
+                  placeholder="Title or description"
+                  value={listFilters.search || ""}
+                  onChange={(event) =>
+                    setListFilters((current) => ({
+                      ...current,
+                      search: event.target.value
+                    }))
+                  }
+                />
+              </label>
+
+              <label>
+                Type
+                <select
+                  value={listFilters.type || ""}
+                  onChange={(event) =>
+                    setListFilters((current) => ({
+                      ...current,
+                      type: (event.target.value as ItemType) || undefined
+                    }))
+                  }
+                >
+                  <option value="">Any</option>
+                  {ITEM_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {titleize(type)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Status
+                <select
+                  value={listFilters.status || ""}
+                  onChange={(event) =>
+                    setListFilters((current) => ({
+                      ...current,
+                      status: (event.target.value as ItemStatus) || undefined
+                    }))
+                  }
+                >
+                  <option value="">Any</option>
+                  {ITEM_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {titleize(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Priority
+                <select
+                  value={listFilters.priority || ""}
+                  onChange={(event) =>
+                    setListFilters((current) => ({
+                      ...current,
+                      priority: (event.target.value as ItemPriority) || undefined
+                    }))
+                  }
+                >
+                  <option value="">Any</option>
+                  {ITEM_PRIORITIES.map((priority) => (
+                    <option key={priority} value={priority}>
+                      {titleize(priority)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Category
+                <select
+                  value={listFilters.categoryId || ""}
+                  onChange={(event) =>
+                    setListFilters((current) => ({
+                      ...current,
+                      categoryId: event.target.value || undefined
+                    }))
+                  }
+                >
+                  <option value="">Any</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Tag
+                <input
+                  placeholder="Single tag"
+                  value={listFilters.tag || ""}
+                  onChange={(event) =>
+                    setListFilters((current) => ({
+                      ...current,
+                      tag: event.target.value || undefined
+                    }))
+                  }
+                />
+              </label>
+            </div>
+
             {loadingItems && <p className="helper">Loading items...</p>}
-            {!loadingItems && items.length === 0 && <p className="helper">No issues/features recorded yet.</p>}
+            {!loadingItems && items.length === 0 && (
+              <p className="helper">
+                {hasActiveListFilters ? "No items match the current filters." : "No items recorded yet."}
+              </p>
+            )}
 
             <div className="item-grid">
               {items.map((item) => (
                 <article className="item-tile" key={item.id}>
                   <div className="item-top">
                     <h4>{item.title || "Untitled item"}</h4>
-                    <span className="tag-chip">{titleize(item.type)}</span>
+                    <div className="item-top-actions">
+                      <span className="tag-chip">{titleize(item.type)}</span>
+                      <button
+                        aria-label="Edit item"
+                        className="icon-button"
+                        onClick={() => navigate(`/issues/${item.id}/edit`)}
+                        title="Edit"
+                        type="button"
+                      >
+                        <AppIcon name="edit" />
+                      </button>
+                      <button
+                        aria-label="Delete item"
+                        className="danger icon-button"
+                        onClick={() => void removeItem(item)}
+                        title="Delete"
+                        type="button"
+                      >
+                        <AppIcon name="trash" />
+                      </button>
+                    </div>
                   </div>
                   <p>{item.description || "No description provided."}</p>
                   <div className="meta-line">
                     <span>{titleize(item.status)}</span>
                     <span>{titleize(item.priority)}</span>
                     <span>{item.tags.length ? item.tags.join(", ") : "no tags"}</span>
+                  </div>
+
+                  <div
+                    aria-label={`Set status for ${item.title.trim() || "item"}`}
+                    className="status-action-row"
+                    role="group"
+                  >
+                    {ITEM_STATUSES.map((status) => (
+                      <button
+                        className={`status-action ${item.status === status ? "active" : ""}`}
+                        disabled={busy || statusUpdatingItemId === item.id || item.status === status}
+                        key={status}
+                        onClick={() => void changeItemStatus(item, status)}
+                        type="button"
+                      >
+                        {titleize(status)}
+                      </button>
+                    ))}
                   </div>
 
                   {item.images.length > 0 && (
@@ -2105,27 +2437,6 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                       ))}
                     </div>
                   )}
-
-                  <div className="inline-actions">
-                    <button
-                      aria-label="Edit item"
-                      className="icon-button"
-                      onClick={() => navigate(`/issues/${item.id}/edit`)}
-                      title="Edit"
-                      type="button"
-                    >
-                      <AppIcon name="edit" />
-                    </button>
-                    <button
-                      aria-label="Delete item"
-                      className="danger icon-button"
-                      onClick={() => void removeItem(item)}
-                      title="Delete"
-                      type="button"
-                    >
-                      <AppIcon name="trash" />
-                    </button>
-                  </div>
                 </article>
               ))}
             </div>
@@ -2348,6 +2659,23 @@ function PromptsPage(props: PromptsPageProps): JSX.Element {
     }
   }
 
+  async function copyPromptScreenshot(image: Item["images"][number]): Promise<void> {
+    if (!supportsImageClipboard()) {
+      reportNotice("Image clipboard is not supported in this browser.");
+      return;
+    }
+
+    try {
+      setBusy(true);
+      await copySingleImageToClipboard(image);
+      reportNotice(`Copied screenshot: ${image.filename}`);
+    } catch (error) {
+      reportError(error, "Failed to copy screenshot");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function downloadItemPrompt(): Promise<void> {
     if (!selectedItemId) {
       return;
@@ -2556,6 +2884,13 @@ function PromptsPage(props: PromptsPageProps): JSX.Element {
                   Download Item YAML + Images
                 </button>
               </div>
+              <ScreenshotCopyList
+                busy={busy}
+                helper="Copy any screenshot directly to clipboard."
+                images={selectedItem.images}
+                onCopy={(image) => void copyPromptScreenshot(image)}
+                title="Screenshots"
+              />
               <textarea readOnly rows={16} value={promptText} />
             </>
           )}
