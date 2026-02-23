@@ -165,25 +165,175 @@ button.danger {
   color: #145d36;
 }
 
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float-desktop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-9px);
+  }
+}
+
+@keyframes float-mobile {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+
+  50% {
+    transform: translateY(-7px) rotate(-1deg);
+  }
+}
+
+@keyframes orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .auth-page {
   min-height: 100vh;
   position: relative;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: clamp(0.95rem, 2vw, 1.75rem);
 }
 
 .glow {
   position: fixed;
-  right: -18vmin;
-  top: -20vmin;
-  width: 54vmin;
-  height: 54vmin;
+  width: 56vmin;
+  height: 56vmin;
   border-radius: 50%;
   filter: blur(8px);
-  opacity: 0.33;
   pointer-events: none;
+  z-index: 0;
+}
+
+.glow-top {
+  right: -18vmin;
+  top: -20vmin;
+  opacity: 0.33;
   background: radial-gradient(circle at 35% 35%, #fb8f45, #f7cf7d);
+}
+
+.glow-bottom {
+  left: -20vmin;
+  bottom: -24vmin;
+  opacity: 0.28;
+  background: radial-gradient(circle at 58% 42%, #8ad2c2, #dcecc3);
+}
+
+.landing-grid {
+  position: relative;
+  z-index: 1;
+  width: min(1100px, 100%);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.95fr);
+  align-items: stretch;
+}
+
+.landing-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(237, 250, 244, 0.92));
+  box-shadow: var(--shadow-soft);
+  animation: rise-in 0.45s ease both;
+}
+
+.landing-copy {
+  max-width: 62ch;
+}
+
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.landing-highlights {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.landing-highlight {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: fit-content;
+  margin: 0;
+  padding: 0.42rem 0.62rem;
+  border: 1px solid #d8e6e1;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #2f4f48;
+  font-size: 0.9rem;
+}
+
+.landing-visual {
+  position: relative;
+  min-height: 250px;
+  border: 1px solid #d5e4df;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 28% 8%, rgba(255, 220, 159, 0.42), transparent 40%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(227, 245, 239, 0.75));
+  overflow: hidden;
+}
+
+.landing-screenshot {
+  position: absolute;
+  border-radius: 14px;
+  border: 1px solid #d6e6e2;
+  box-shadow: 0 16px 38px rgba(17, 35, 37, 0.22);
+}
+
+.landing-screenshot.desktop {
+  left: 0.9rem;
+  bottom: 1rem;
+  width: min(78%, 430px);
+  animation: float-desktop 4.2s ease-in-out infinite;
+}
+
+.landing-screenshot.mobile {
+  right: 0.9rem;
+  top: 1rem;
+  width: min(30%, 170px);
+  animation: float-mobile 4.8s ease-in-out infinite;
+}
+
+.landing-orbit {
+  position: absolute;
+  right: -55px;
+  bottom: -55px;
+  width: 220px;
+  height: 220px;
+  color: rgba(14, 118, 101, 0.26);
+  stroke: currentColor;
+  stroke-width: 1.4;
+  fill: none;
+  animation: orbit-spin 20s linear infinite;
 }
 
 .auth-card {
@@ -195,6 +345,20 @@ button.danger {
   border-radius: 22px;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.97), rgba(247, 255, 250, 0.93));
   box-shadow: var(--shadow-soft);
+  animation: rise-in 0.52s ease both;
+  animation-delay: 0.08s;
+}
+
+.landing-grid .auth-card {
+  width: 100%;
+  max-width: 460px;
+  justify-self: end;
+  align-self: start;
+}
+
+.auth-page > .auth-card {
+  position: relative;
+  z-index: 1;
 }
 
 .auth-head {
@@ -236,9 +400,17 @@ button.danger {
   margin: 0;
 }
 
-.auth-card h1 {
+.auth-card h1,
+.auth-card h2 {
   margin: 0.35rem 0;
+}
+
+.auth-card h1 {
   font-size: clamp(1.3rem, 4vw, 2.1rem);
+}
+
+.auth-card h2 {
+  font-size: clamp(1.05rem, 2.8vw, 1.35rem);
 }
 
 .auth-card p {
@@ -270,6 +442,56 @@ button.danger {
 .stacked-form {
   display: grid;
   gap: 0.7rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-card,
+  .auth-card,
+  .landing-screenshot.desktop,
+  .landing-screenshot.mobile,
+  .landing-orbit {
+    animation: none;
+  }
+}
+
+.issue-form-tabs {
+  display: inline-flex;
+  width: fit-content;
+  gap: 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0.2rem;
+}
+
+.issue-form-tabs button {
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0.42rem 0.88rem;
+}
+
+.issue-form-tabs button.active {
+  color: #fff;
+  background: linear-gradient(130deg, var(--brand), var(--brand-deep));
+}
+
+.prompt-tab-panel {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.prompt-image-list {
+  display: grid;
+  gap: 0.45rem;
+  border-top: 1px dashed var(--line);
+  padding-top: 0.62rem;
+}
+
+.prompt-image-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
 }
 
 .shell-wrap {
@@ -785,6 +1007,14 @@ button.danger {
 }
 
 @media (max-width: 1140px) {
+  .landing-grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(290px, 0.95fr);
+  }
+
+  .landing-grid .auth-card {
+    max-width: 430px;
+  }
+
   .shell-wrap {
     grid-template-columns: 1fr;
   }
@@ -804,6 +1034,36 @@ button.danger {
 }
 
 @media (max-width: 880px) {
+  .auth-page.landing-page {
+    place-items: start;
+  }
+
+  .landing-grid {
+    grid-template-columns: 1fr;
+    max-width: 720px;
+  }
+
+  .landing-grid .auth-card {
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .landing-card {
+    padding: 1rem;
+  }
+
+  .landing-visual {
+    min-height: 220px;
+  }
+
+  .landing-screenshot.desktop {
+    width: min(82%, 420px);
+  }
+
+  .landing-screenshot.mobile {
+    width: min(42%, 170px);
+  }
+
   .grid-two,
   .grid-three,
   .prompt-layout {
@@ -829,6 +1089,49 @@ button.danger {
 }
 
 @media (max-width: 740px) {
+  .auth-page {
+    padding: 0.72rem;
+  }
+
+  .landing-card,
+  .auth-card {
+    border-radius: 16px;
+    padding: 0.85rem;
+  }
+
+  .landing-actions button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .landing-highlight {
+    width: 100%;
+    border-radius: 12px;
+  }
+
+  .landing-visual {
+    min-height: 200px;
+  }
+
+  .landing-screenshot.desktop {
+    left: 0.6rem;
+    bottom: 0.7rem;
+    width: min(84%, 320px);
+  }
+
+  .landing-screenshot.mobile {
+    right: 0.6rem;
+    top: 0.6rem;
+    width: min(45%, 140px);
+  }
+
+  .landing-orbit {
+    right: -42px;
+    bottom: -42px;
+    width: 165px;
+    height: 165px;
+  }
+
   .shell-wrap {
     padding: 0.6rem;
   }

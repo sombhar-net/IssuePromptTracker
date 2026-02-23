@@ -81,6 +81,39 @@ When making changes, append an entry to **Change Log** below with:
 - Verification performed:
   - `npm run test`
   - `npm run build`
+- Fixed issue form UX regression on `/issues/:itemId/edit`:
+  - existing saved screenshots are now displayed in the Details tab (not only newly queued files)
+  - added preview/remove actions for saved screenshots directly from the edit/manage form
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+  - `npm run test`
+- Updated `/prompts` copy behavior to match issue prompt tab:
+  - `Copy Prompt` now attempts rich clipboard copy with prompt text + saved images
+  - falls back to prompt text copy/manual fallback when image clipboard is unsupported or blocked
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- Refined prompt copy fallback notices on issue prompt tab and `/prompts` page:
+  - plural `images` message is now shown only when the item has multiple images
+  - singular `image` message is shown for one-image fallback failures
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- Added issue management prompt tab on `/issues/:itemId/edit`:
+  - tab switch inside item form (`Details` / `Prompt`)
+  - prompt tab supports copy prompt text and download item prompt bundle
+  - prompt tab supports copy prompt + saved images to clipboard for direct paste into AI input fields (browser support dependent)
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- Updated issue prompt tab copy behavior:
+  - primary `Copy Prompt` action now attempts to copy prompt text + saved images in one click
+  - added fallback to copy prompt text only when browser/app clipboard does not support image writes
+  - secondary action now explicitly copies prompt text only
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
 - Added project-scoped prompt template editor and API support:
   - new route `/prompt-templates` in web shell
   - API endpoints `GET/PUT /api/prompt-templates/:projectId`
@@ -154,3 +187,13 @@ When making changes, append an entry to **Change Log** below with:
 - Verification performed:
   - `npm run test`
   - `npm run build`
+- Added a dedicated public landing experience before authentication:
+  - new hero section with branded visuals, animated screenshot mockups, and feature chips
+  - action-focused CTA buttons for `Sign In` and `Create Account` that jump users to the auth form
+- Removed admin-credential hint text from login/register UI.
+- Improved unauthenticated page responsiveness:
+  - two-column desktop hero + auth card layout
+  - stacked mobile layout with tighter spacing and touch-friendly CTA sizing
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`

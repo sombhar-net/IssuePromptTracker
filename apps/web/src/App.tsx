@@ -69,6 +69,7 @@ type ReportError = (error: unknown, fallbackMessage: string) => void;
 type ReportNotice = (message: string) => void;
 type ItemFormField = "type" | "categoryId" | "title" | "description" | "status" | "priority";
 type ItemFormErrors = Partial<Record<ItemFormField, string>>;
+type IssueFormTab = "details" | "prompt";
 
 const ITEM_TYPES: ItemType[] = ["issue", "feature"];
 const ITEM_STATUSES: ItemStatus[] = ["open", "in_progress", "resolved", "archived"];
@@ -370,7 +371,7 @@ interface AuthScreenProps {
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }
 
-function AuthScreen(props: AuthScreenProps): JSX.Element {
+function AuthCard(props: AuthScreenProps): JSX.Element {
   const {
     busy,
     authMode,
@@ -387,69 +388,152 @@ function AuthScreen(props: AuthScreenProps): JSX.Element {
   } = props;
 
   return (
-    <main className="auth-page">
-      <div className="glow" />
-      <section className="auth-card">
-        <header className="auth-head">
-          <div className="logo-lockup">
-            <BrandMark className="brand-mark brand-mark-lg" />
-            <div className="brand-copy">
-              <p className="kicker">Issue Prompt Tracker</p>
-              <h1>Capture what breaks, ship what works</h1>
+    <section className="auth-card">
+      <header className="auth-head">
+        <p className="kicker">Workspace Access</p>
+        <h2>Sign in to continue</h2>
+        <p>Manage projects, issues, screenshots, and AI-ready prompt exports.</p>
+      </header>
+
+      {errorMessage && <div className="alert error">{errorMessage}</div>}
+      {notice && <div className="alert success">{notice}</div>}
+
+      <div className="pill-switch" role="tablist" aria-label="Authentication mode">
+        <button
+          className={authMode === "login" ? "active" : ""}
+          onClick={() => onAuthModeChange("login")}
+          type="button"
+        >
+          Login
+        </button>
+        <button
+          className={authMode === "register" ? "active" : ""}
+          onClick={() => onAuthModeChange("register")}
+          type="button"
+        >
+          Register
+        </button>
+      </div>
+
+      <form className="stacked-form" onSubmit={onSubmit}>
+        {authMode === "register" && (
+          <input
+            id="auth-display-name"
+            placeholder="Display name (optional)"
+            value={authDisplayName}
+            onChange={(event) => onAuthDisplayNameChange(event.target.value)}
+          />
+        )}
+        <input
+          autoComplete="email"
+          id="auth-email"
+          placeholder="Email"
+          type="email"
+          value={authEmail}
+          onChange={(event) => onAuthEmailChange(event.target.value)}
+        />
+        <input
+          autoComplete={authMode === "login" ? "current-password" : "new-password"}
+          id="auth-password"
+          placeholder="Password"
+          type="password"
+          value={authPassword}
+          onChange={(event) => onAuthPasswordChange(event.target.value)}
+        />
+        <button className="primary button-with-icon" disabled={busy} type="submit">
+          <AppIcon name={authMode === "login" ? "save" : "plus"} />
+          {authMode === "login" ? "Sign In" : "Create Account"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function AuthScreen(props: AuthScreenProps): JSX.Element {
+  const { onAuthModeChange } = props;
+
+  function focusAuth(mode: AuthMode): void {
+    onAuthModeChange(mode);
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.setTimeout(() => {
+      const emailInput = document.getElementById("auth-email");
+      if (emailInput instanceof HTMLInputElement) {
+        emailInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        emailInput.focus();
+      }
+    }, 120);
+  }
+
+  return (
+    <main className="auth-page landing-page">
+      <div className="glow glow-top" />
+      <div className="glow glow-bottom" />
+
+      <section className="landing-grid">
+        <article className="landing-card">
+          <header className="auth-head">
+            <div className="logo-lockup">
+              <BrandMark className="brand-mark brand-mark-lg" />
+              <div className="brand-copy">
+                <p className="kicker">Issue Prompt Tracker</p>
+                <h1>Capture what breaks, ship what works</h1>
+              </div>
             </div>
+            <p className="landing-copy">
+              Track issues and feature ideas while testing on mobile or web, then export clean prompt bundles for AI
+              tools with screenshots and YAML context.
+            </p>
+          </header>
+
+          <div className="landing-actions">
+            <button className="primary button-with-icon" onClick={() => focusAuth("login")} type="button">
+              <AppIcon name="save" />
+              Sign In
+            </button>
+            <button className="button-with-icon" onClick={() => focusAuth("register")} type="button">
+              <AppIcon name="plus" />
+              Create Account
+            </button>
           </div>
-          <p>Sign in to manage projects, issues, screenshots, and AI prompt exports.</p>
-        </header>
 
-        {errorMessage && <div className="alert error">{errorMessage}</div>}
-        {notice && <div className="alert success">{notice}</div>}
+          <div className="landing-highlights">
+            <p className="landing-highlight">
+              <AppIcon name="folder" />
+              Project-specific issue and feature tracking.
+            </p>
+            <p className="landing-highlight">
+              <AppIcon name="copy" />
+              One-tap prompt copy with text plus linked media.
+            </p>
+            <p className="landing-highlight">
+              <AppIcon name="download" />
+              Download single-item or full-project YAML bundles.
+            </p>
+          </div>
 
-        <div className="pill-switch" role="tablist" aria-label="Authentication mode">
-          <button
-            className={authMode === "login" ? "active" : ""}
-            onClick={() => onAuthModeChange("login")}
-            type="button"
-          >
-            Login
-          </button>
-          <button
-            className={authMode === "register" ? "active" : ""}
-            onClick={() => onAuthModeChange("register")}
-            type="button"
-          >
-            Register
-          </button>
-        </div>
-
-        <form className="stacked-form" onSubmit={onSubmit}>
-          {authMode === "register" && (
-            <input
-              placeholder="Display name (optional)"
-              value={authDisplayName}
-              onChange={(event) => onAuthDisplayNameChange(event.target.value)}
+          <div className="landing-visual" aria-hidden>
+            <img
+              alt="Desktop view of issue tracker"
+              className="landing-screenshot desktop"
+              src="/branding/screenshot-desktop.png"
             />
-          )}
-          <input
-            autoComplete="email"
-            placeholder="Email"
-            type="email"
-            value={authEmail}
-            onChange={(event) => onAuthEmailChange(event.target.value)}
-          />
-          <input
-            autoComplete={authMode === "login" ? "current-password" : "new-password"}
-            placeholder="Password"
-            type="password"
-            value={authPassword}
-            onChange={(event) => onAuthPasswordChange(event.target.value)}
-          />
-          <button className="primary button-with-icon" disabled={busy} type="submit">
-            <AppIcon name={authMode === "login" ? "save" : "plus"} />
-            {authMode === "login" ? "Sign In" : "Create Account"}
-          </button>
-        </form>
+            <img
+              alt="Mobile view of issue tracker"
+              className="landing-screenshot mobile"
+              src="/branding/screenshot-mobile.png"
+            />
+            <svg className="landing-orbit" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="110" cy="110" r="72" />
+              <circle cx="110" cy="110" r="95" />
+            </svg>
+          </div>
+        </article>
 
-        <p className="helper">Admin access comes from `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`.</p>
+        <AuthCard {...props} />
       </section>
     </main>
   );
@@ -932,10 +1016,19 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   const [fieldErrors, setFieldErrors] = useState<ItemFormErrors>({});
   const [isDropzoneActive, setIsDropzoneActive] = useState(false);
   const [previewImage, setPreviewImage] = useState<PreviewImageModal | null>(null);
+  const [formTab, setFormTab] = useState<IssueFormTab>("details");
+  const [issuePromptText, setIssuePromptText] = useState("");
+  const [issuePromptFallback, setIssuePromptFallback] = useState("");
+  const [promptBusy, setPromptBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImagesRef = useRef<PendingImage[]>([]);
   const isFormMode = mode === "form";
   const isEditMode = Boolean(editItemId);
+  const promptItemId = editingItemId || editItemId || null;
+  const promptItem = useMemo(
+    () => (promptItemId ? items.find((item) => item.id === promptItemId) ?? null : null),
+    [items, promptItemId]
+  );
 
   function clearFieldError(field: ItemFormField): void {
     setFieldErrors((current) => {
@@ -1130,6 +1223,49 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   }, [isFormMode, editItemId, items, editingItemId]);
 
   useEffect(() => {
+    if (!isFormMode) {
+      return;
+    }
+
+    setFormTab("details");
+    setIssuePromptText("");
+    setIssuePromptFallback("");
+  }, [isFormMode, editItemId]);
+
+  useEffect(() => {
+    if (!isFormMode || formTab !== "prompt" || !promptItemId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadIssuePrompt = async (): Promise<void> => {
+      try {
+        setPromptBusy(true);
+        const response = await createItemPrompt(promptItemId);
+        if (cancelled) {
+          return;
+        }
+        setIssuePromptText(response.text);
+      } catch (error) {
+        if (!cancelled) {
+          reportError(error, "Failed to generate prompt");
+        }
+      } finally {
+        if (!cancelled) {
+          setPromptBusy(false);
+        }
+      }
+    };
+
+    void loadIssuePrompt();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [formTab, isFormMode, promptItemId, reportError]);
+
+  useEffect(() => {
     if (!previewImage) {
       return;
     }
@@ -1144,6 +1280,156 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [previewImage]);
 
+  async function generateIssuePromptText(): Promise<string | null> {
+    if (!promptItemId) {
+      reportNotice("Save this item first to generate a prompt.");
+      return null;
+    }
+
+    try {
+      setPromptBusy(true);
+      const response = await createItemPrompt(promptItemId);
+      setIssuePromptText(response.text);
+      return response.text;
+    } catch (error) {
+      reportError(error, "Failed to generate prompt");
+      return null;
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
+  async function copyIssuePromptText(): Promise<void> {
+    const promptText = await generateIssuePromptText();
+    if (!promptText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(promptText);
+      setIssuePromptFallback("");
+      reportNotice("Prompt copied to clipboard");
+    } catch {
+      setIssuePromptFallback(promptText);
+      reportNotice("Clipboard blocked. Copy from fallback text area.");
+    }
+  }
+
+  async function downloadIssuePromptBundle(): Promise<void> {
+    if (!promptItemId) {
+      reportNotice("Save this item first to download prompt package.");
+      return;
+    }
+
+    try {
+      setPromptBusy(true);
+      await downloadItemExport(promptItemId);
+      reportNotice("Item prompt package downloaded");
+    } catch (error) {
+      reportError(error, "Failed to download item prompt package");
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
+  async function copyIssuePromptWithImages(): Promise<void> {
+    const promptText = await generateIssuePromptText();
+    if (!promptText) {
+      return;
+    }
+
+    if (!promptItem) {
+      reportNotice("Item details are still loading. Try again in a moment.");
+      return;
+    }
+
+    const imageCount = promptItem.images.length;
+
+    if (imageCount === 0) {
+      reportNotice("No saved images found. Prompt text copied only.");
+      try {
+        await navigator.clipboard.writeText(promptText);
+        setIssuePromptFallback("");
+      } catch {
+        setIssuePromptFallback(promptText);
+      }
+      return;
+    }
+
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      try {
+        await navigator.clipboard.writeText(promptText);
+        setIssuePromptFallback("");
+      } catch {
+        setIssuePromptFallback(promptText);
+      }
+      reportNotice(
+        imageCount > 1
+          ? "Image clipboard for multiple images is not supported in this browser. Prompt text copied only."
+          : "Image clipboard is not supported in this browser. Prompt text copied only."
+      );
+      return;
+    }
+
+    try {
+      setPromptBusy(true);
+
+      const imageBlobs = await Promise.all(
+        promptItem.images.map(async (image) => {
+          const response = await fetch(image.url);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image ${image.filename}`);
+          }
+
+          const blob = await response.blob();
+          const buffer = await blob.arrayBuffer();
+          const mimeType =
+            blob.type.startsWith("image/") || image.mimeType.startsWith("image/")
+              ? blob.type || image.mimeType
+              : "image/png";
+
+          return new Blob([buffer], { type: mimeType });
+        })
+      );
+
+      const textBlob = new Blob([promptText], { type: "text/plain" });
+      const firstImageBlob = imageBlobs[0];
+      const clipboardItems: ClipboardItem[] = [
+        new ClipboardItem({
+          "text/plain": textBlob,
+          [firstImageBlob.type || "image/png"]: firstImageBlob
+        })
+      ];
+
+      for (const imageBlob of imageBlobs.slice(1)) {
+        clipboardItems.push(
+          new ClipboardItem({
+            [imageBlob.type || "image/png"]: imageBlob
+          })
+        );
+      }
+
+      await navigator.clipboard.write(clipboardItems);
+      setIssuePromptFallback("");
+      reportNotice(`Copied prompt and ${imageBlobs.length} image(s). Paste into your AI input.`);
+    } catch (error) {
+      try {
+        await navigator.clipboard.writeText(promptText);
+        setIssuePromptFallback("");
+        reportNotice(
+          imageCount > 1
+            ? "Could not copy images in this browser/app. Prompt text copied only."
+            : "Could not copy image in this browser/app. Prompt text copied only."
+        );
+      } catch {
+        reportError(error, "Failed to copy prompt and images");
+        setIssuePromptFallback(promptText);
+      }
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
   function resetForm(): void {
     setDraft({
       ...DEFAULT_DRAFT,
@@ -1154,6 +1440,9 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     clearPendingImages();
     setEditingItemId(null);
     setFieldErrors({});
+    setFormTab("details");
+    setIssuePromptText("");
+    setIssuePromptFallback("");
   }
 
   function beginEdit(item: Item): void {
@@ -1171,6 +1460,9 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     setTagInput(item.tags.join(", "));
     clearPendingImages();
     setFieldErrors({});
+    setFormTab("details");
+    setIssuePromptText("");
+    setIssuePromptFallback("");
   }
 
   async function submitIssue(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -1333,7 +1625,30 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
         {isFormMode && (
           <article className="panel-card">
             <h3>{isEditMode ? "Update Item" : "Create Item"}</h3>
-            <form className="stacked-form" onSubmit={submitIssue}>
+            <div className="issue-form-tabs" role="tablist" aria-label="Issue manage tabs">
+              <button
+                aria-selected={formTab === "details"}
+                className={formTab === "details" ? "active" : ""}
+                onClick={() => setFormTab("details")}
+                role="tab"
+                type="button"
+              >
+                Details
+              </button>
+              <button
+                aria-selected={formTab === "prompt"}
+                className={formTab === "prompt" ? "active" : ""}
+                disabled={!isEditMode || missingEditTarget}
+                onClick={() => setFormTab("prompt")}
+                role="tab"
+                type="button"
+              >
+                Prompt
+              </button>
+            </div>
+
+            {formTab === "details" && (
+              <form className="stacked-form" onSubmit={submitIssue}>
             <div className="grid-two">
               <label className={fieldErrors.type ? "field-with-error" : ""}>
                 Type *
@@ -1560,6 +1875,73 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                   </div>
                 </div>
               )}
+
+              {isEditMode && (
+                <div className="pending-upload-panel">
+                  <div className="pending-upload-head">
+                    <h4>Saved Screenshots ({promptItem?.images.length ?? 0})</h4>
+                    <p className="helper">Existing screenshots already attached to this item.</p>
+                  </div>
+                  {!promptItem ? (
+                    <p className="helper">Loading existing screenshots...</p>
+                  ) : promptItem.images.length === 0 ? (
+                    <p className="helper">No saved screenshots yet.</p>
+                  ) : (
+                    <div className="media-preview-grid">
+                      {promptItem.images.map((image) => (
+                        <article className="media-preview-card" key={image.id}>
+                          <button
+                            className="media-thumb"
+                            onClick={() =>
+                              setPreviewImage({
+                                url: image.url,
+                                filename: image.filename,
+                                itemId: promptItem.id,
+                                imageId: image.id
+                              })
+                            }
+                            type="button"
+                          >
+                            <img alt={image.filename} loading="lazy" src={image.url} />
+                          </button>
+                          <div className="media-card-meta">
+                            <strong title={image.filename}>{image.filename}</strong>
+                            <span>{formatFileSize(image.sizeBytes)}</span>
+                          </div>
+                          <div className="inline-actions">
+                            <button
+                              aria-label="Preview saved image"
+                              className="icon-button"
+                              onClick={() =>
+                                setPreviewImage({
+                                  url: image.url,
+                                  filename: image.filename,
+                                  itemId: promptItem.id,
+                                  imageId: image.id
+                                })
+                              }
+                              title="Preview"
+                              type="button"
+                            >
+                              <AppIcon name="eye" />
+                            </button>
+                            <button
+                              aria-label="Remove saved image"
+                              className="danger icon-button"
+                              disabled={busy}
+                              onClick={() => void removeImage(promptItem.id, image.id)}
+                              title="Remove"
+                              type="button"
+                            >
+                              <AppIcon name="trash" />
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
               <div className="inline-actions">
@@ -1572,7 +1954,82 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                   Cancel
                 </button>
               </div>
-            </form>
+              </form>
+            )}
+
+            {formTab === "prompt" && (
+              <div className="prompt-tab-panel">
+                {!isEditMode || !promptItemId || missingEditTarget ? (
+                  <p className="helper">Save this item first, then use the Prompt tab.</p>
+                ) : (
+                  <>
+                    <p className="helper">
+                      Use copy-with-images for direct paste into AI tools, or copy text only.
+                    </p>
+                    {loadingItems && !promptItem && <p className="helper">Loading item details...</p>}
+                    <div className="inline-actions">
+                      <button
+                        className="primary button-with-icon"
+                        disabled={promptBusy}
+                        onClick={() => void copyIssuePromptWithImages()}
+                        type="button"
+                      >
+                        <AppIcon name="copy" />
+                        Copy Prompt (with Images)
+                      </button>
+                      <button
+                        className="button-with-icon"
+                        disabled={promptBusy}
+                        onClick={() => void copyIssuePromptText()}
+                        type="button"
+                      >
+                        <AppIcon name="copy" />
+                        Copy Prompt Text Only
+                      </button>
+                      <button
+                        className="button-with-icon"
+                        disabled={promptBusy}
+                        onClick={() => void downloadIssuePromptBundle()}
+                        type="button"
+                      >
+                        <AppIcon name="download" />
+                        Download Item YAML + Images
+                      </button>
+                    </div>
+                    {promptBusy && <p className="helper">Preparing prompt...</p>}
+                    <textarea
+                      placeholder="Prompt preview appears here."
+                      readOnly
+                      rows={14}
+                      value={issuePromptText}
+                    />
+                    {issuePromptFallback && (
+                      <div className="fallback-copy">
+                        <p>Clipboard blocked. Copy manually from here:</p>
+                        <textarea readOnly rows={8} value={issuePromptFallback} />
+                      </div>
+                    )}
+
+                    {promptItem && promptItem.images.length > 0 && (
+                      <div className="prompt-image-list">
+                        <h4>Saved Images ({promptItem.images.length})</h4>
+                        <p className="helper">
+                          These images are included in prompt downloads and used by copy-with-images.
+                        </p>
+                        <div className="prompt-image-chips">
+                          {promptItem.images.map((image) => (
+                            <span className="tag-chip" key={image.id} title={image.filename}>
+                              {image.filename}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             {missingEditTarget && (
               <p className="helper">Could not find this item in the currently selected project.</p>
             )}
@@ -1810,14 +2267,79 @@ function PromptsPage(props: PromptsPageProps): JSX.Element {
       setBusy(true);
       const response = await createItemPrompt(selectedItemId);
       setPromptText(response.text);
+      const selected = selectedItem ?? items.find((item) => item.id === selectedItemId) ?? null;
+      const imageCount = selected?.images.length ?? 0;
+
+      async function copyTextOnly(notice: string): Promise<void> {
+        try {
+          await navigator.clipboard.writeText(response.text);
+          setManualCopyFallback("");
+          reportNotice(notice);
+        } catch {
+          setManualCopyFallback(response.text);
+          reportNotice("Clipboard blocked. Copy from fallback text area.");
+        }
+      }
+
+      if (!selected || imageCount === 0) {
+        await copyTextOnly("Prompt copied to clipboard");
+        return;
+      }
+
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        await copyTextOnly(
+          imageCount > 1
+            ? "Image clipboard for multiple images is not supported in this browser. Prompt text copied only."
+            : "Image clipboard is not supported in this browser. Prompt text copied only."
+        );
+        return;
+      }
 
       try {
-        await navigator.clipboard.writeText(response.text);
+        const imageBlobs = await Promise.all(
+          selected.images.map(async (image) => {
+            const imageResponse = await fetch(image.url);
+            if (!imageResponse.ok) {
+              throw new Error(`Failed to fetch image ${image.filename}`);
+            }
+
+            const blob = await imageResponse.blob();
+            const buffer = await blob.arrayBuffer();
+            const mimeType =
+              blob.type.startsWith("image/") || image.mimeType.startsWith("image/")
+                ? blob.type || image.mimeType
+                : "image/png";
+
+            return new Blob([buffer], { type: mimeType });
+          })
+        );
+
+        const textBlob = new Blob([response.text], { type: "text/plain" });
+        const firstImageBlob = imageBlobs[0];
+        const clipboardItems: ClipboardItem[] = [
+          new ClipboardItem({
+            "text/plain": textBlob,
+            [firstImageBlob.type || "image/png"]: firstImageBlob
+          })
+        ];
+
+        for (const imageBlob of imageBlobs.slice(1)) {
+          clipboardItems.push(
+            new ClipboardItem({
+              [imageBlob.type || "image/png"]: imageBlob
+            })
+          );
+        }
+
+        await navigator.clipboard.write(clipboardItems);
         setManualCopyFallback("");
-        reportNotice("Prompt copied to clipboard");
+        reportNotice(`Copied prompt and ${imageBlobs.length} image(s). Paste into your AI input.`);
       } catch {
-        setManualCopyFallback(response.text);
-        reportNotice("Clipboard blocked. Copy from fallback text area.");
+        await copyTextOnly(
+          imageCount > 1
+            ? "Could not copy images in this browser/app. Prompt text copied only."
+            : "Could not copy image in this browser/app. Prompt text copied only."
+        );
       }
     } catch (error) {
       reportError(error, "Failed to copy prompt");
