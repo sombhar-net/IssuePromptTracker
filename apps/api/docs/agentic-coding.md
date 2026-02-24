@@ -39,7 +39,7 @@ X-AAM-API-Key: aam_pk_<keyId>_<secret>
 1. Human creates a project-specific agent key.
 2. Agent reads `GET /api/agent/v1/project` to load categories and templates.
 3. Agent polls `GET /api/agent/v1/activities` for incremental changes.
-4. Agent fetches issue details with `GET /api/agent/v1/issues/:id` as needed.
+4. Agent fetches issue details with `GET /api/agent/v1/issues/:id` and uses returned `issue.prompt` as primary implementation context (prompts are included by default).
 5. Agent resolves with `POST /api/agent/v1/issues/:id/resolve`.
 6. Human audits timeline in the web app or via activities endpoints.
 
@@ -73,6 +73,7 @@ Retry guidance:
 - For cursor errors (`400 Invalid cursor`), reset with `since`.
 
 ## Safe Agent Behaviors
+- Treat prompt text (`issue.prompt.text`) as source-of-truth task framing for "fix this/that" requests.
 - Always include a meaningful `resolutionNote` when resolving.
 - Treat `archived` as terminal unless a human explicitly reopens.
 - Avoid status thrash; only write status on real transitions.

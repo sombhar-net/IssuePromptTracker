@@ -2655,7 +2655,7 @@ app.get("/api/agent/v1/issues", async (request, reply) => {
         .optional()
         .default(agentIssueListLimitDefault),
       cursor: z.string().min(1).optional(),
-      includePrompts: queryBooleanSchema.optional().default(false),
+      includePrompts: queryBooleanSchema.optional().default(true),
       includeImagesInline: queryBooleanSchema.optional().default(false)
     })
     .parse(request.query);
@@ -2744,7 +2744,7 @@ app.get("/api/agent/v1/issues/:id", async (request, reply) => {
   const params = z.object({ id: z.string().min(1) }).parse(request.params);
   const query = z
     .object({
-      includePrompts: queryBooleanSchema.optional().default(false),
+      includePrompts: queryBooleanSchema.optional().default(true),
       includeImagesInline: queryBooleanSchema.optional().default(false)
     })
     .parse(request.query);
@@ -2983,9 +2983,11 @@ app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
     };
   });
 
+  const templates = await getProjectPromptTemplateSet(agentAuth.projectId);
   const issue = await buildAgentIssuePayload(transactionResult.item, {
-    includePrompts: false,
-    includeImagesInline: false
+    includePrompts: true,
+    includeImagesInline: false,
+    templates
   });
 
   return {

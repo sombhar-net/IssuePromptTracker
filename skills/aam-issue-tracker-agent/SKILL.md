@@ -1,6 +1,6 @@
 ---
 name: aam-issue-tracker-agent
-description: Use Issue Prompt Tracker agent APIs to build or operate coding automations with API-key auth, including project bootstrap, activity polling, issue detail fetches, prompt generation, image retrieval, and resolution updates. Trigger this skill when tasks involve /api/agent/v1 endpoints, X-AAM-API-Key usage, cursor-based polling, or creating/updating an agent skill integration for this tracker.
+description: Use Issue Prompt Tracker agent APIs to build or operate prompt-first coding automations with API-key auth, including project bootstrap, activity polling, issue detail fetches with default embedded prompts, image retrieval, and resolution updates. Trigger this skill when tasks involve /api/agent/v1 endpoints, X-AAM-API-Key usage, cursor-based polling, or creating/updating an agent skill integration for this tracker.
 ---
 
 # AAM Issue Tracker Agent
@@ -29,11 +29,13 @@ description: Use Issue Prompt Tracker agent APIs to build or operate coding auto
 2. Poll changes
    - Call `GET /agent/v1/activities?limit=50&cursor=<cursor>`.
    - Persist `nextCursor` after successful page processing.
-3. Fetch issue details only when needed
-   - Use `GET /agent/v1/issues/:id` and `GET /agent/v1/issues/:id/activities`.
+3. Prompt-first execution for "fix this/that issue"
+   - Use `GET /agent/v1/issues/:id`; prompt data is included by default in `issue.prompt`.
+   - Treat `issue.prompt.text` as primary implementation context.
+4. Fetch supporting context only when needed
+   - Use `GET /agent/v1/issues/:id/activities` for timeline/audit context.
    - Fetch images via `GET /agent/v1/issues/:issueId/images/:imageId`.
-4. Generate prompt context when required
-   - Use `GET /agent/v1/issues/:id/prompt`.
+   - Use `GET /agent/v1/issues/:id/prompt` only as a fallback if prompt embedding is disabled.
 5. Complete work and update tracker
    - Use `POST /agent/v1/issues/:id/resolve` with `status` (`resolved` or `archived`) and a non-empty `resolutionNote`.
 

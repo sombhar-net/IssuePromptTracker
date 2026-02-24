@@ -4,7 +4,7 @@
 1. Environment Contract
 2. Bootstrap and Scope Validation
 3. Polling the Activity Feed
-4. Loading Issue Details and Prompt Context
+4. Prompt-First Issue Execution
 5. Resolving Work
 6. Failure Handling
 7. Minimal End-to-End Example
@@ -94,19 +94,26 @@ Recovery fallback for cursor corruption:
 aam_get "${base_url}/agent/v1/activities?limit=50&since=2026-02-24T00:00:00.000Z"
 ```
 
-## 4. Loading Issue Details and Prompt Context
+## 4. Prompt-First Issue Execution
 
 Fetch only for activities you need to act on:
 
 ```bash
-aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}?includePrompts=true"
+aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}"
 ```
 
-Prompt-only fetch:
+By default, `issue.prompt` is embedded in issue payloads. Build your execution plan from:
+
+- `issue.prompt.text` for instructions
+- `issue.prompt.yaml` for structured context
+
+Prompt-only fallback fetch:
 
 ```bash
 aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}/prompt"
 ```
+
+Only use `includePrompts=false` when you intentionally need lighter issue payloads.
 
 Image fetch:
 
@@ -160,7 +167,7 @@ aam_get "${base_url}/agent/v1/project"
 aam_get "${base_url}/agent/v1/activities?limit=50"
 
 # 3) inspect issue
-aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}?includePrompts=true"
+aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}"
 
 # 4) mark complete
 aam_post_json \

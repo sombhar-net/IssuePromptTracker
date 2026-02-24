@@ -42,7 +42,7 @@ loop every 30s:
 ## Suggested Routing in Agents
 - `STATUS_CHANGE`: update task lifecycle.
 - `RESOLUTION_NOTE`: capture final reasoning/notes.
-- `ITEM_UPDATED`: re-fetch issue detail if key fields changed.
+- `ITEM_UPDATED`: re-fetch issue detail and rely on embedded `issue.prompt` for current implementation context.
 - `IMAGE_*`: refresh image manifests in your local cache.
 
 ## Operational Checklist

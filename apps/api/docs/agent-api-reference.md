@@ -29,7 +29,7 @@ Query params:
 - `type`, `status`, `priority`, `categoryId`, `tag`, `search`
 - `limit` (default 20, max 100)
 - `cursor` (opaque)
-- `includePrompts` (`true|false`)
+- `includePrompts` (`true|false`, default `true`)
 - `includeImagesInline` (`true|false`)
 
 ```bash
@@ -38,13 +38,17 @@ curl -sS \
   "http://localhost:4000/api/agent/v1/issues?status=open&limit=20"
 ```
 
+`issues[*].prompt` is included by default. Set `includePrompts=false` for lighter payloads.
+
 ## Agent Issue Detail
 ### `GET /api/agent/v1/issues/:id`
 ```bash
 curl -sS \
   -H "X-AAM-API-Key: $AAM_API_KEY" \
-  "http://localhost:4000/api/agent/v1/issues/<issueId>?includePrompts=true"
+  "http://localhost:4000/api/agent/v1/issues/<issueId>"
 ```
+
+`issue.prompt` is included by default. Use `includePrompts=false` to suppress prompt data.
 
 ## Agent Prompt for One Issue
 ### `GET /api/agent/v1/issues/:id/prompt`

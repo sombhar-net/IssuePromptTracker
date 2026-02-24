@@ -447,3 +447,25 @@ When making changes, append an entry to **Change Log** below with:
 - Migration/env impact: none.
 - Verification performed:
   - `npm run build -w apps/web`
+- 2026-02-24
+- Updated agent API issue defaults to prompt-first behavior:
+  - `GET /api/agent/v1/issues` now defaults `includePrompts=true`
+  - `GET /api/agent/v1/issues/:id` now defaults `includePrompts=true`
+  - `POST /api/agent/v1/issues/:id/resolve` response now includes prompt payload in returned `issue`
+- Updated agent docs to reflect prompt-first workflow:
+  - API docs now document default embedded prompts and `includePrompts=false` as optional opt-out
+  - guide/playbook now instruct agents to execute from `issue.prompt` for "fix this/that issue" requests
+  - public `/agentic-coding` page quickstart/skill guidance updated to emphasize prompt-first operation
+- Updated skill package to follow prompt-first execution:
+  - `skills/aam-issue-tracker-agent/SKILL.md` now treats `issue.prompt.text` as primary context
+  - `skills/aam-issue-tracker-agent/references/api-usage.md` examples now use default prompt embedding
+  - `skills/aam-issue-tracker-agent/agents/openai.yaml` metadata updated for prompt-first behavior
+  - repackaged `apps/web/public/skills/aam-issue-tracker-agent.zip`
+- Migration/env impact: none.
+- Verification performed:
+  - `python3 /home/astinaam/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/aam-issue-tracker-agent`
+  - `npm run skills:package -- aam-issue-tracker-agent`
+  - `unzip -l apps/web/public/skills/aam-issue-tracker-agent.zip`
+  - `npm run build -w apps/api`
+  - `npm run build -w apps/web`
+  - `npm run test`

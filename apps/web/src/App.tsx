@@ -769,6 +769,7 @@ function AgentDocsPage(props: { showBackToSignIn?: boolean } = {}): JSX.Element 
             <li>Create a project and generate an agent API key from `/projects/:projectId/keys`.</li>
             <li>Use header `X-AAM-API-Key` for all `/api/agent/v1/*` requests.</li>
             <li>Bootstrap context with `GET /api/agent/v1/project`.</li>
+            <li>Fetch `GET /api/agent/v1/issues/:id` and use `issue.prompt.text` (included by default) as execution context.</li>
             <li>Poll `GET /api/agent/v1/activities` using `cursor` + `limit`.</li>
             <li>Resolve work with `POST /api/agent/v1/issues/:id/resolve` including `resolutionNote`.</li>
           </ol>
@@ -779,6 +780,7 @@ function AgentDocsPage(props: { showBackToSignIn?: boolean } = {}): JSX.Element 
           <ol className="docs-list">
             <li>Download the ready-to-use skill bundle from the `Skill ZIP` button.</li>
             <li>Define inputs as environment variables: `AAM_API_BASE_URL`, `AAM_API_KEY`, and optional `AAM_PROJECT_ID`.</li>
+            <li>Design your agent around the prompt-first loop: human says "fix this/that issue", agent fetches issue, executes from `issue.prompt.text`.</li>
             <li>Implement idempotent activity handling keyed by immutable `activity.id`.</li>
             <li>Fetch issue details on relevant activity types (`STATUS_CHANGE`, `ITEM_UPDATED`, `IMAGE_*`).</li>
             <li>Execute coding task, then submit `resolve` with concise technical note.</li>
@@ -816,7 +818,7 @@ GET /api/agent/v1/issues
 GET /api/agent/v1/issues/:id
 GET /api/agent/v1/issues/:id/activities
 GET /api/agent/v1/activities
-GET /api/agent/v1/issues/:id/prompt
+GET /api/agent/v1/issues/:id/prompt (optional fallback)
 POST /api/agent/v1/issues/:id/resolve
 GET /api/agent/v1/docs.md`}</pre>
         </article>
