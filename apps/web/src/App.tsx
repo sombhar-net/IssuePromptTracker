@@ -118,6 +118,13 @@ const ITEM_FORM_FIELDS: ItemFormField[] = [
 
 const SELECTED_PROJECT_STORAGE_KEY = "aam_selected_project_id";
 const AGENT_SKILL_ZIP_PATH = "/skills/aam-issue-tracker-agent.zip";
+type AgentSkillCli = "codex" | "claude_code" | "gemini_cli" | "github_copilot";
+const AGENT_SKILL_CLIS: Array<{ id: AgentSkillCli; label: string }> = [
+  { id: "codex", label: "Codex" },
+  { id: "claude_code", label: "Claude Code" },
+  { id: "gemini_cli", label: "Gemini CLI" },
+  { id: "github_copilot", label: "GitHub Copilot" }
+];
 
 const DEFAULT_DRAFT: ItemPayload = {
   projectId: "",
@@ -684,14 +691,120 @@ function AuthScreen(props: AuthScreenProps): JSX.Element {
   );
 }
 
-function AgentDocsPage(props: { showBackToSignIn?: boolean } = {}): JSX.Element {
-  const { showBackToSignIn = true } = props;
+function buildSkillEnvText(apiBaseUrl: string, projectId: string): string {
+  return [
+    `AAM_API_BASE_URL=${apiBaseUrl}`,
+    "AAM_API_KEY=aam_pk_...",
+    `AAM_PROJECT_ID=${projectId}`,
+    "AAM_POLL_SECONDS=30"
+  ].join("\n");
+}
+
+function slugifyProjectName(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "project"
+  );
+}
+
+function buildCliCommands(cli: AgentSkillCli, envFilePath: string): string {
+  switch (cli) {
+    case "codex":
+      return `# Install the skill bundle into the Codex skills directory
+mkdir -p "$HOME/.codex/skills"
+unzip -o "$HOME/Downloads/aam-issue-tracker-agent.zip" -d "$HOME/.codex/skills"
+
+# Load env vars and validate API key/project scope
+env_file="${envFilePath}"
+set -a; source "$env_file"; set +a
+"$HOME/.codex/skills/aam-issue-tracker-agent/scripts/bootstrap.sh"
+
+# Start Codex in your working repository
+cd /path/to/your/codebase
+codex
+# Prompt in Codex:
+# $aam-issue-tracker-agent load the issues and list it to me here`;
+    case "claude_code":
+      return `# Install the skill bundle so scripts are available outside any repo
+mkdir -p "$HOME/.aam-agent-skills"
+unzip -o "$HOME/Downloads/aam-issue-tracker-agent.zip" -d "$HOME/.aam-agent-skills"
+
+# Load env vars and validate API key/project scope
+env_file="${envFilePath}"
+set -a; source "$env_file"; set +a
+"$HOME/.aam-agent-skills/aam-issue-tracker-agent/scripts/bootstrap.sh"
+
+# Start Claude Code in your working repository
+cd /path/to/your/codebase
+claude
+# Ask Claude to use the AAM agent API with the loaded env vars`;
+    case "gemini_cli":
+      return `# Install the skill bundle so scripts are available outside any repo
+mkdir -p "$HOME/.aam-agent-skills"
+unzip -o "$HOME/Downloads/aam-issue-tracker-agent.zip" -d "$HOME/.aam-agent-skills"
+
+# Load env vars and validate API key/project scope
+env_file="${envFilePath}"
+set -a; source "$env_file"; set +a
+"$HOME/.aam-agent-skills/aam-issue-tracker-agent/scripts/bootstrap.sh"
+
+# Start Gemini CLI in your working repository
+cd /path/to/your/codebase
+gemini
+# Ask Gemini to use the AAM agent API with the loaded env vars`;
+    case "github_copilot":
+      return `# Install the skill bundle so scripts are available outside any repo
+mkdir -p "$HOME/.aam-agent-skills"
+unzip -o "$HOME/Downloads/aam-issue-tracker-agent.zip" -d "$HOME/.aam-agent-skills"
+
+# Load env vars and validate API key/project scope
+env_file="${envFilePath}"
+set -a; source "$env_file"; set +a
+"$HOME/.aam-agent-skills/aam-issue-tracker-agent/scripts/bootstrap.sh"
+
+# Start GitHub Copilot CLI in your working repository
+cd /path/to/your/codebase
+copilot || gh copilot
+# Ask Copilot to use the AAM agent API with the loaded env vars`;
+  }
+}
+
+interface AgentDocsPageProps {
+  showBackToSignIn?: boolean;
+  selectedProject?: Project | null;
+}
+
+function AgentDocsPage(props: AgentDocsPageProps = {}): JSX.Element {
+  const { showBackToSignIn = true, selectedProject = null } = props;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [markdown, setMarkdown] = useState("");
+  const [activeCli, setActiveCli] = useState<AgentSkillCli>("codex");
+  const [copyFeedback, setCopyFeedback] = useState("");
   const pageClassName = showBackToSignIn
     ? "docs-page docs-page-public"
     : "docs-page docs-page-embedded";
+  const apiBaseUrl =
+    typeof window !== "undefined" ? `${window.location.origin}/api` : "https://tracker.example.com/api";
+  const projectId = selectedProject?.id || "project_id_here";
+  const envFilePath = `$HOME/.env.skills/aam-${slugifyProjectName(selectedProject?.name || "project")}.env`;
+  const envBlock = useMemo(() => buildSkillEnvText(apiBaseUrl, projectId), [apiBaseUrl, projectId]);
+  const cliCommandBlock = useMemo(
+    () => buildCliCommands(activeCli, envFilePath),
+    [activeCli, envFilePath]
+  );
+  const activeCliLabel = AGENT_SKILL_CLIS.find((entry) => entry.id === activeCli)?.label || "CLI";
+
+  async function copyText(value: string, successMessage: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyFeedback(successMessage);
+    } catch {
+      setCopyFeedback("Clipboard copy failed. Copy manually from the command block.");
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -790,25 +903,67 @@ function AgentDocsPage(props: { showBackToSignIn?: boolean } = {}): JSX.Element 
 
         <article className="panel-card">
           <h3>Install and Run the Skill</h3>
-          <pre>{`# 1) Download Skill ZIP from this page and install to Codex skills path
-mkdir -p "$HOME/.codex/skills"
-unzip -o "$HOME/Downloads/aam-issue-tracker-agent.zip" -d "$HOME/.codex/skills"
-
-# 2) Keep one env file per tracker project
-mkdir -p .env.skills
-cat > .env.skills/project-a.env <<'EOF'
-AAM_API_BASE_URL=https://tracker.example.com/api
-AAM_API_KEY=aam_pk_...
-AAM_PROJECT_ID=project_id_here
-AAM_POLL_SECONDS=30
-EOF
-
-# 3) Run each project in its own shell/session
-set -a; source .env.skills/project-a.env; set +a
-"$HOME/.codex/skills/aam-issue-tracker-agent/scripts/bootstrap.sh"`}</pre>
           <p className="helper">
-            For parallel projects, use separate env files and separate terminal sessions to avoid key/project mix-ups.
+            Use one shared env file location under your home directory so commands work from any codebase path.
           </p>
+          <div className="docs-command-block">
+            <div className="docs-command-head">
+              <strong>1. Create or update your env file</strong>
+              <button
+                className="button-with-icon"
+                onClick={() =>
+                  void copyText(
+                    `mkdir -p "$HOME/.env.skills"\nenv_file="${envFilePath}"\ncat > "$env_file" <<'EOF'\n${envBlock}\nEOF`,
+                    "Env setup commands copied."
+                  )
+                }
+                type="button"
+              >
+                <AppIcon name="copy" />
+                Copy Env Setup
+              </button>
+            </div>
+            <pre>{`mkdir -p "$HOME/.env.skills"
+env_file="${envFilePath}"
+cat > "$env_file" <<'EOF'
+${envBlock}
+EOF`}</pre>
+          </div>
+          <p className="helper">
+            `AAM_API_BASE_URL` is auto-filled from this site. `AAM_PROJECT_ID` is pre-filled from your active project when signed in.
+          </p>
+          <div className="docs-cli-tabs" role="tablist" aria-label="CLI options">
+            {AGENT_SKILL_CLIS.map((cli) => (
+              <button
+                key={cli.id}
+                aria-selected={activeCli === cli.id}
+                className={activeCli === cli.id ? "active" : ""}
+                onClick={() => setActiveCli(cli.id)}
+                role="tab"
+                type="button"
+              >
+                {cli.label}
+              </button>
+            ))}
+          </div>
+          <div className="docs-command-block">
+            <div className="docs-command-head">
+              <strong>2. Install and run with {activeCliLabel}</strong>
+              <button
+                className="button-with-icon"
+                onClick={() => void copyText(cliCommandBlock, `${activeCliLabel} commands copied.`)}
+                type="button"
+              >
+                <AppIcon name="copy" />
+                Copy {activeCliLabel}
+              </button>
+            </div>
+            <pre>{cliCommandBlock}</pre>
+          </div>
+          <p className="helper">
+            For parallel projects, keep one env file per tracker project and run each in a separate shell session.
+          </p>
+          {copyFeedback && <p className="helper">{copyFeedback}</p>}
         </article>
 
         <article className="panel-card">
@@ -4160,7 +4315,7 @@ function AppShell(props: ShellProps): JSX.Element {
             />
             <Route
               path="/agentic-coding"
-              element={<AgentDocsPage showBackToSignIn={false} />}
+              element={<AgentDocsPage selectedProject={selectedProject} showBackToSignIn={false} />}
             />
             <Route
               path="/agent-docs"

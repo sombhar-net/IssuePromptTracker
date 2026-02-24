@@ -1001,6 +1001,17 @@ app.setErrorHandler((error, request, reply) => {
     });
   }
 
+  const statusCode =
+    typeof (error as { statusCode?: unknown }).statusCode === "number"
+      ? (error as { statusCode: number }).statusCode
+      : undefined;
+
+  if (statusCode && statusCode >= 400 && statusCode < 500) {
+    return reply.status(statusCode).send({
+      message: error instanceof Error ? error.message : "Request failed"
+    });
+  }
+
   request.log.error(error);
 
   if (!reply.sent) {

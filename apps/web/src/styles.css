@@ -351,6 +351,41 @@ button.danger {
   font-size: 0.82rem;
 }
 
+.docs-command-block {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.docs-command-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.docs-cli-tabs {
+  display: inline-flex;
+  width: fit-content;
+  gap: 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 0.2rem;
+}
+
+.docs-cli-tabs button {
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0.42rem 0.88rem;
+}
+
+.docs-cli-tabs button.active {
+  color: #fff;
+  background: linear-gradient(130deg, var(--brand), var(--brand-deep));
+}
+
 .glow {
   position: fixed;
   width: 56vmin;
@@ -1561,6 +1596,13 @@ button.danger {
     font-size: 0.8rem;
   }
 
+  .docs-cli-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-radius: 14px;
+  }
+
   .docs-page-embedded {
     padding: 0;
   }
@@ -1667,6 +1709,15 @@ button.danger {
     padding: 0.65rem;
   }
 
+  .docs-command-head {
+    align-items: stretch;
+  }
+
+  .docs-command-head button {
+    width: 100%;
+    justify-content: center;
+  }
+
   .docs-list {
     padding-left: 1rem;
     font-size: 0.92rem;
@@ -1680,6 +1731,10 @@ button.danger {
 
   .docs-page-public {
     padding: 0.72rem;
+  }
+
+  .docs-cli-tabs {
+    grid-template-columns: 1fr;
   }
 
   .landing-highlight {

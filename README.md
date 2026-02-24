@@ -46,20 +46,21 @@ mkdir -p "$HOME/.codex/skills"
 unzip -o "$HOME/Downloads/aam-issue-tracker-agent.zip" -d "$HOME/.codex/skills"
 ```
 
-Parallel project env management:
+Cross-repo env management (one file per tracker project, stored in home directory):
 ```bash
-mkdir -p .env.skills
-cat > .env.skills/project-a.env <<'EOF'
-AAM_API_BASE_URL=https://tracker.example.com/api
+mkdir -p "$HOME/.env.skills"
+cat > "$HOME/.env.skills/aam-project-a.env" <<'EOF'
+AAM_API_BASE_URL=https://your-tracker-host.example.com/api
 AAM_API_KEY=aam_pk_...
 AAM_PROJECT_ID=project_id_here
 AAM_POLL_SECONDS=30
 EOF
 
-set -a; source .env.skills/project-a.env; set +a
+set -a; source "$HOME/.env.skills/aam-project-a.env"; set +a
 "$HOME/.codex/skills/aam-issue-tracker-agent/scripts/bootstrap.sh"
 ```
 - Use one env file and one shell session per project to isolate API keys and project scope.
+- Supported CLIs for agent workflow: `codex`, `claude`, `gemini`, `copilot` (or `gh copilot`).
 
 ## Branding assets
 - Generated files live in `apps/web/public/branding`.

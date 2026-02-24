@@ -87,6 +87,16 @@ When making changes, append an entry to **Change Log** below with:
 - Migration/env impact: none.
 - Verification performed:
   - `npm run build -w apps/web`
+- 2026-02-24
+- Fixed agent resolve error handling regression that surfaced as HTTP 500 on malformed JSON requests:
+  - updated API global error handler to preserve Fastify/client `4xx` status codes (e.g. invalid JSON body parse errors) instead of always returning `500`
+  - invalid JSON requests to `POST /api/agent/v1/issues/:id/resolve` now return `400` with actionable parser message
+  - valid resolve requests continue to succeed and return issue payload + resolution metadata
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/api`
+  - malformed JSON request to `/api/agent/v1/issues/:id/resolve` returns `400` and parser message
+  - valid resolve request to `/api/agent/v1/issues/:id/resolve` returns `200`
 - Added reusable screenshot copy UI component and wired it into both prompt workflows:
   - issue form Prompt tab now shows per-screenshot copy buttons
   - `/prompts` page now shows per-screenshot copy buttons for the selected item (same component reused)
@@ -502,3 +512,16 @@ When making changes, append an entry to **Change Log** below with:
   - `python3 /home/astinaam/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/aam-issue-tracker-agent`
   - `npm run skills:package -- aam-issue-tracker-agent`
   - `curl -sS -H "X-AAM-API-Key: $AAM_API_KEY" "$AAM_API_BASE_URL/api/agent/v1/issues/<issueId>/work-context"`
+- 2026-02-24
+- Implemented issue `cmm0j38un000hqzm804i2vu56` ("Install and run skills instructions") on the public/authenticated `/agentic-coding` page:
+  - replaced static install snippet with copyable command blocks
+  - added tabbed CLI views with copy actions for `Codex`, `Claude Code`, `Gemini CLI`, and `GitHub Copilot`
+  - switched env setup guidance to home-directory scoped files (`$HOME/.env.skills/...`) so commands work across multiple repositories/directories
+  - auto-fills `AAM_API_BASE_URL` from the current site origin and auto-fills `AAM_PROJECT_ID` from the active signed-in project (while keeping `AAM_API_KEY` as user-provided)
+  - wired authenticated docs route to pass the active project into `AgentDocsPage`
+- Updated README agent skill section to match the new cross-repo env-file pattern and list supported CLIs.
+- Migration/env impact:
+  - no DB migration
+  - no new environment variables
+- Verification performed:
+  - `npm run build -w apps/web`
