@@ -1887,7 +1887,8 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   const [listFilters, setListFilters] = useState<ItemFilters>(DEFAULT_ISSUE_LIST_FILTERS);
   const [showListFilters, setShowListFilters] = useState(false);
   const [statusUpdatingItemId, setStatusUpdatingItemId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImagesRef = useRef<PendingImage[]>([]);
   const isFormMode = mode === "form";
   const isEditMode = Boolean(editItemId);
@@ -2016,8 +2017,12 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     setPreviewImage((current) => (current?.pendingId === pendingId ? null : current));
   }
 
-  function openFilePicker(): void {
-    fileInputRef.current?.click();
+  function openGalleryPicker(): void {
+    galleryInputRef.current?.click();
+  }
+
+  function openCameraPicker(): void {
+    cameraInputRef.current?.click();
   }
 
   function handleDropzoneDragOver(event: DragEvent<HTMLDivElement>): void {
@@ -2042,7 +2047,7 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   function handleDropzoneKeydown(event: KeyboardEvent<HTMLDivElement>): void {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      openFilePicker();
+      openGalleryPicker();
     }
   }
 
@@ -2756,11 +2761,21 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
             <div className="screenshot-field">
               <label>Screenshots</label>
               <input
-                ref={fileInputRef}
+                ref={galleryInputRef}
+                accept="image/*"
+                className="sr-only"
+                multiple
+                type="file"
+                onChange={(event) => {
+                  appendPendingFiles(Array.from(event.target.files || []));
+                  event.target.value = "";
+                }}
+              />
+              <input
+                ref={cameraInputRef}
                 accept="image/*"
                 capture="environment"
                 className="sr-only"
-                multiple
                 type="file"
                 onChange={(event) => {
                   appendPendingFiles(Array.from(event.target.files || []));
@@ -2781,13 +2796,17 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
               >
                 <p className="dropzone-title">Drop screenshots here</p>
                 <p className="helper">
-                  Tap choose for file/camera, or focus here and paste image from clipboard (Ctrl/Cmd+V).
+                  Tap choose for gallery/files, use camera for a new photo, or focus here and paste image from clipboard (Ctrl/Cmd+V).
                 </p>
               </div>
               <div className="inline-actions">
-                <button className="button-with-icon" onClick={openFilePicker} type="button">
+                <button className="button-with-icon" onClick={openGalleryPicker} type="button">
                   <AppIcon name="plus" />
                   Choose Screenshots
+                </button>
+                <button className="button-with-icon" onClick={openCameraPicker} type="button">
+                  <AppIcon name="eye" />
+                  Use Camera
                 </button>
                 {pendingImages.length > 0 && (
                   <button className="button-with-icon" onClick={clearPendingImages} type="button">

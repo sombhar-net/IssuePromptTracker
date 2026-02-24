@@ -525,3 +525,11 @@ When making changes, append an entry to **Change Log** below with:
   - `npm run build -w apps/api`
   - malformed JSON request to `/api/agent/v1/issues/:id/resolve` returns `400`
   - valid JSON request to `/api/agent/v1/issues/:id/resolve` returns `200`
+- 2026-02-24
+- Fixed mobile screenshot picker behavior on issue form dropzone:
+  - removed camera-forced behavior from primary screenshot picker so `Choose Screenshots` opens gallery/files on mobile
+  - added dedicated `Use Camera` action with a separate capture-enabled input for direct camera capture when desired
+  - updated dropzone helper copy to clarify gallery vs camera actions
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
