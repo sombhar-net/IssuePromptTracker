@@ -20,6 +20,7 @@ enum ItemType {
 enum ItemStatus {
   open
   in_progress
+  in_review
   resolved
   archived
 }
@@ -50,6 +51,9 @@ enum ItemActivityType {
   IMAGES_REORDERED
   RESOLUTION_NOTE
   STATUS_CHANGE
+  REVIEW_SUBMITTED
+  REVIEW_APPROVED
+  REVIEW_REJECTED
 }
 
 model Project {

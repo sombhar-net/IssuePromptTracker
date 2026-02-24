@@ -342,6 +342,16 @@ export async function updateItemStatus(id: string, status: ItemStatus): Promise<
   });
 }
 
+export async function reviewItem(
+  id: string,
+  payload: { decision: "approve" | "reject"; reviewNote?: string }
+): Promise<Item> {
+  return request<Item>(`/items/${id}/review`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function getItemActivities(
   itemId: string,
   options: { cursor?: string; limit?: number; type?: ItemActivityType } = {}

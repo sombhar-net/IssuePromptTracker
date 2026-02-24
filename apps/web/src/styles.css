@@ -1265,6 +1265,87 @@ button.danger {
   background: var(--media-bg);
 }
 
+.review-layout {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.4fr);
+}
+
+.review-list {
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+}
+
+.review-item {
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 0.62rem;
+  display: grid;
+  gap: 0.28rem;
+}
+
+.review-item > span {
+  color: var(--muted);
+  font-size: 0.81rem;
+}
+
+.review-item.active {
+  border-color: #1f8474;
+  box-shadow: 0 0 0 2px rgba(14, 118, 101, 0.15);
+}
+
+.review-main {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.review-submission {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.review-session-id {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 0.1rem 0.38rem;
+  overflow-wrap: anywhere;
+}
+
+.review-command-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.review-command-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  padding: 0.45rem;
+}
+
+.review-command-card summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.review-command-card pre {
+  margin-top: 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 34vh;
+  overflow: auto;
+}
+
 .prompt-layout {
   display: grid;
   gap: 0.85rem;
@@ -1637,6 +1718,7 @@ button.danger {
 
   .grid-two,
   .grid-three,
+  .review-layout,
   .prompt-layout {
     grid-template-columns: 1fr;
   }

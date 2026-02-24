@@ -1,7 +1,7 @@
 export type ItemType = "issue" | "feature";
 export type PromptTemplateKind = ItemType | "other";
 
-export type ItemStatus = "open" | "in_progress" | "resolved" | "archived";
+export type ItemStatus = "open" | "in_progress" | "in_review" | "resolved" | "archived";
 
 export type ItemPriority = "low" | "medium" | "high" | "critical";
 

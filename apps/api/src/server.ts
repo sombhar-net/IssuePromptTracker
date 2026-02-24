@@ -59,7 +59,7 @@ const prisma = new PrismaClient();
 const app = Fastify({ logger: true });
 
 const itemTypeSchema = z.enum(["issue", "feature"]);
-const itemStatusSchema = z.enum(["open", "in_progress", "resolved", "archived"]);
+const itemStatusSchema = z.enum(["open", "in_progress", "in_review", "resolved", "archived"]);
 const itemPrioritySchema = z.enum(["low", "medium", "high", "critical"]);
 const categoryKindSchema = z.enum(["issue", "feature", "other"]);
 const promptTemplateTextSchema = z
@@ -81,7 +81,7 @@ const agentIssueListLimitDefault = 20;
 const agentIssueListLimitMax = 100;
 const activityListLimitDefault = 50;
 const activityListLimitMax = 200;
-const agentResolveStatusSchema = z.enum(["resolved", "archived"]);
+const reviewDecisionSchema = z.enum(["approve", "reject"]);
 const itemActivityTypeSchema = z.enum([
   "ITEM_CREATED",
   "ITEM_UPDATED",
@@ -89,7 +89,10 @@ const itemActivityTypeSchema = z.enum([
   "IMAGE_DELETED",
   "IMAGES_REORDERED",
   "RESOLUTION_NOTE",
-  "STATUS_CHANGE"
+  "STATUS_CHANGE",
+  "REVIEW_SUBMITTED",
+  "REVIEW_APPROVED",
+  "REVIEW_REJECTED"
 ]);
 const activityQuerySchema = z.object({
   limit: z.coerce
@@ -412,7 +415,7 @@ function toPromptInput(item: {
   type: "issue" | "feature";
   title: string;
   description: string;
-  status: "open" | "in_progress" | "resolved" | "archived";
+  status: "open" | "in_progress" | "in_review" | "resolved" | "archived";
   priority: "low" | "medium" | "high" | "critical";
   tags: string[];
   createdAt: Date;
@@ -836,7 +839,7 @@ interface ItemUpdateSnapshot {
   type: "issue" | "feature";
   title: string;
   description: string;
-  status: "open" | "in_progress" | "resolved" | "archived";
+  status: "open" | "in_progress" | "in_review" | "resolved" | "archived";
   priority: "low" | "medium" | "high" | "critical";
   tags: string[];
 }
@@ -1843,6 +1846,99 @@ app.patch("/api/items/:id/status", async (request, reply) => {
         }
       });
     }
+
+    return updated;
+  });
+
+  return {
+    ...item,
+    images: item.images.map((image) => ({
+      ...image,
+      url: imagePublicUrl(image.relativePath)
+    }))
+  };
+});
+
+app.post("/api/items/:id/review", async (request, reply) => {
+  const authUser = getAuthUser(request);
+  const params = z.object({ id: z.string().min(1) }).parse(request.params);
+  const body = z
+    .object({
+      decision: reviewDecisionSchema,
+      reviewNote: z.string().max(8000).optional()
+    })
+    .parse(request.body);
+
+  const reviewNote = body.reviewNote?.trim() || "";
+  if (body.decision === "reject" && reviewNote.length === 0) {
+    return reply.status(400).send({
+      message: "Review note is required when rejecting an AI submission."
+    });
+  }
+
+  const existing = await prisma.item.findFirst({
+    where: {
+      id: params.id,
+      ...itemAccessWhere(authUser)
+    },
+    select: {
+      id: true,
+      status: true
+    }
+  });
+
+  if (!existing) {
+    return reply.status(404).send({ message: "Item not found" });
+  }
+
+  if (existing.status !== "in_review") {
+    return reply.status(409).send({
+      message: "Only items in review can be approved or rejected."
+    });
+  }
+
+  const nextStatus = body.decision === "approve" ? "resolved" : "in_progress";
+  const reviewActivityType =
+    body.decision === "approve" ? "REVIEW_APPROVED" : "REVIEW_REJECTED";
+  const reviewMessage =
+    body.decision === "approve"
+      ? "Human review approved AI submission."
+      : "Human review rejected AI submission.";
+
+  const actor = userActivityActor(authUser);
+  const item = await prisma.$transaction(async (tx) => {
+    const updated = await tx.item.update({
+      where: { id: existing.id },
+      data: {
+        status: nextStatus
+      },
+      include: itemWithRelationsInclude
+    });
+
+    await recordItemActivity(tx, {
+      itemId: updated.id,
+      actor,
+      type: "STATUS_CHANGE",
+      message: `Status changed from ${existing.status} to ${nextStatus}`,
+      metadata: {
+        from: existing.status,
+        to: nextStatus,
+        reason: "human_review_decision"
+      }
+    });
+
+    await recordItemActivity(tx, {
+      itemId: updated.id,
+      actor,
+      type: reviewActivityType,
+      message: reviewMessage,
+      metadata: {
+        decision: body.decision,
+        reviewNote: reviewNote || null,
+        previousStatus: existing.status,
+        nextStatus
+      }
+    });
 
     return updated;
   });
@@ -2956,16 +3052,52 @@ app.get("/api/agent/v1/issues/:issueId/images/:imageId", async (request, reply) 
 app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
   const agentAuth = getAgentAuth(request);
   const params = z.object({ id: z.string().min(1) }).parse(request.params);
+  const agentCommandOutputSchema = z.object({
+    command: z
+      .string()
+      .max(4000)
+      .transform((value) => value.trim())
+      .refine((value) => value.length > 0, {
+        message: "Command text is required"
+      }),
+    output: z
+      .string()
+      .max(60000)
+      .transform((value) => value.trim())
+      .refine((value) => value.length > 0, {
+        message: "Command output is required"
+      }),
+    exitCode: z.number().int().min(-999).max(999).optional()
+  });
   const body = z
     .object({
-      status: agentResolveStatusSchema,
+      chatSessionId: z
+        .string()
+        .max(200)
+        .transform((value) => value.trim())
+        .refine((value) => value.length > 0, {
+          message: "Chat session id is required"
+        }),
       resolutionNote: z
         .string()
-        .max(4000)
+        .max(8000)
         .transform((value) => value.trim())
         .refine((value) => value.length > 0, {
           message: "Resolution note is required"
-        })
+        }),
+      codeChanges: z
+        .string()
+        .max(20000)
+        .transform((value) => value.trim())
+        .refine((value) => value.length > 0, {
+          message: "Code changes summary is required"
+        }),
+      commandOutputs: z.array(agentCommandOutputSchema).min(1).max(40),
+      testSummary: z
+        .string()
+        .max(12000)
+        .transform((value) => value.trim())
+        .optional()
     })
     .parse(request.body);
 
@@ -2984,7 +3116,14 @@ app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
     return reply.status(404).send({ message: "Issue not found" });
   }
 
-  const statusChanged = existing.status !== body.status;
+  if (existing.status === "resolved" || existing.status === "archived") {
+    return reply.status(409).send({
+      message: "Issue is already closed by a human reviewer."
+    });
+  }
+
+  const nextStatus = "in_review";
+  const statusChanged = existing.status !== nextStatus;
   const actor = agentActivityActor(agentAuth);
   const transactionResult = await prisma.$transaction(async (tx) => {
     let item: ItemWithRelations;
@@ -2993,7 +3132,7 @@ app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
       item = await tx.item.update({
         where: { id: existing.id },
         data: {
-          status: body.status
+          status: nextStatus
         },
         include: itemWithRelationsInclude
       });
@@ -3002,10 +3141,11 @@ app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
         itemId: existing.id,
         actor,
         type: "STATUS_CHANGE",
-        message: `Status changed from ${existing.status} to ${body.status}`,
+        message: `Status changed from ${existing.status} to ${nextStatus}`,
         metadata: {
           from: existing.status,
-          to: body.status
+          to: nextStatus,
+          reason: "agent_review_submission"
         }
       });
     } else {
@@ -3019,19 +3159,26 @@ app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
       item = found;
     }
 
-    const resolutionActivity = await tx.itemActivity.create({
+    const reviewSubmissionActivity = await tx.itemActivity.create({
       data: {
         itemId: existing.id,
         actorType: actor.actorType,
         agentKeyId: actor.agentKeyId,
-        type: "RESOLUTION_NOTE",
-        message: body.resolutionNote
+        type: "REVIEW_SUBMITTED",
+        message: "Agent submitted implementation details for human review.",
+        metadata: {
+          chatSessionId: body.chatSessionId,
+          resolutionNote: body.resolutionNote,
+          codeChanges: body.codeChanges,
+          commandOutputs: body.commandOutputs,
+          testSummary: body.testSummary || null
+        }
       }
     });
 
     return {
       item,
-      resolutionActivity
+      reviewSubmissionActivity
     };
   });
 
@@ -3045,10 +3192,11 @@ app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
   return {
     issue,
     statusChanged,
-    resolution: {
-      id: transactionResult.resolutionActivity.id,
-      message: transactionResult.resolutionActivity.message,
-      createdAt: transactionResult.resolutionActivity.createdAt.toISOString()
+    reviewSubmission: {
+      id: transactionResult.reviewSubmissionActivity.id,
+      chatSessionId: body.chatSessionId,
+      message: transactionResult.reviewSubmissionActivity.message,
+      createdAt: transactionResult.reviewSubmissionActivity.createdAt.toISOString()
     }
   };
 });

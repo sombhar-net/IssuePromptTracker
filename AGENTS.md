@@ -533,3 +533,39 @@ When making changes, append an entry to **Change Log** below with:
 - Migration/env impact: none.
 - Verification performed:
   - `npm run build -w apps/web`
+- 2026-02-24
+- Added human-gated AI review workflow for issues:
+  - introduced new item status `in_review`
+  - updated agent resolve flow so `POST /api/agent/v1/issues/:id/resolve` always submits to `in_review`
+  - resolve payload now requires comprehensive implementation evidence:
+    - `chatSessionId`
+    - `resolutionNote`
+    - `codeChanges`
+    - `commandOutputs` (command + output, optional exit code)
+    - optional `testSummary`
+  - agent resolve now records `REVIEW_SUBMITTED` activity metadata with all fields above
+  - added new human review endpoint `POST /api/items/:id/review`:
+    - `approve` moves `in_review` -> `resolved`
+    - `reject` moves `in_review` -> `in_progress` (review note required)
+    - records `REVIEW_APPROVED` / `REVIEW_REJECTED` + `STATUS_CHANGE` activities
+- Added web review queue UI:
+  - new authenticated route `/reviews` and sidebar entry `Reviews`
+  - queue shows issues in `in_review` for selected project
+  - detail panel shows latest AI submission metadata (chat session id, resolution summary, code changes, test summary, command outputs)
+  - reviewer actions to approve/reject with reviewer note and activity timeline context
+- Updated public/authenticated agent docs and skill package content:
+  - docs now describe required resolve payload evidence and human review handoff
+  - corrected API reference examples to show agent transitions to `in_review` (not directly to `resolved`)
+  - repackaged `apps/web/public/skills/aam-issue-tracker-agent.zip` after skill doc updates
+- Migration/env impact:
+  - new DB migration required: `20260224193000_add_in_review_and_review_activity_types`
+  - no new environment variables
+- Verification performed:
+  - `npm run prisma:generate -w apps/api`
+  - `npm run build -w apps/api`
+  - `npm run build -w apps/web`
+  - `npm run build`
+  - `npm run test`
+  - `python3 /home/astinaam/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/aam-issue-tracker-agent`
+  - `npm run skills:package -- aam-issue-tracker-agent`
+  - `unzip -l apps/web/public/skills/aam-issue-tracker-agent.zip`

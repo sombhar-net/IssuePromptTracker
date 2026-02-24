@@ -41,8 +41,9 @@ X-AAM-API-Key: aam_pk_<keyId>_<secret>
 3. Agent polls `GET /api/agent/v1/activities` for incremental changes.
 4. Agent loads pre-action context with `GET /api/agent/v1/issues/:id/work-context`.
 5. Agent downloads and reviews all listed images via `GET /api/agent/v1/issues/:issueId/images/:imageId`.
-6. Agent resolves with `POST /api/agent/v1/issues/:id/resolve`.
-7. Human audits timeline in the web app or via activities endpoints.
+6. Agent submits implementation details with `POST /api/agent/v1/issues/:id/resolve`, which moves status to `in_review`.
+7. Human reviewer approves/rejects with `POST /api/items/:id/review` (or equivalent web UI action).
+8. Human audits timeline in the web app or via activities endpoints.
 
 ## Polling Strategy (Recommended)
 Use cursor-based polling instead of repeatedly fetching full issue lists.
@@ -61,6 +62,9 @@ Current activity event types:
 - `IMAGES_REORDERED`
 - `STATUS_CHANGE`
 - `RESOLUTION_NOTE`
+- `REVIEW_SUBMITTED`
+- `REVIEW_APPROVED`
+- `REVIEW_REJECTED`
 
 ## Error Handling Rules
 - `401`: auth missing/invalid.
@@ -76,7 +80,8 @@ Retry guidance:
 ## Safe Agent Behaviors
 - Treat prompt text (`issue.prompt.text`) as source-of-truth task framing for "fix this/that" requests.
 - Do not implement or resolve until prompt and all issue images are loaded/reviewed.
-- Always include a meaningful `resolutionNote` when resolving.
+- Always include `chatSessionId`, `resolutionNote`, `codeChanges`, and command-output evidence when submitting for review.
+- Do not attempt to finalize issues as `resolved`/`archived` via agent keys; human reviewers own final closure.
 - Treat `archived` as terminal unless a human explicitly reopens.
 - Avoid status thrash; only write status on real transitions.
 - Use issue/image URLs from API responses instead of constructing paths manually.

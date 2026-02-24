@@ -42,6 +42,9 @@ loop every 30s:
 ## Suggested Routing in Agents
 - `STATUS_CHANGE`: update task lifecycle.
 - `RESOLUTION_NOTE`: capture final reasoning/notes.
+- `REVIEW_SUBMITTED`: treat as handoff checkpoint (implementation details submitted for human approval).
+- `REVIEW_APPROVED`: mark workflow complete.
+- `REVIEW_REJECTED`: re-fetch work context and continue implementation.
 - `ITEM_UPDATED`: call `GET /api/agent/v1/issues/:id/work-context`, then download all listed images before acting.
 - `IMAGE_*`: refresh image manifests in your local cache.
 

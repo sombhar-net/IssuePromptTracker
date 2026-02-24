@@ -1,5 +1,5 @@
 export type ItemType = "issue" | "feature";
-export type ItemStatus = "open" | "in_progress" | "resolved" | "archived";
+export type ItemStatus = "open" | "in_progress" | "in_review" | "resolved" | "archived";
 export type ItemPriority = "low" | "medium" | "high" | "critical";
 export type ItemActivityType =
   | "ITEM_CREATED"
@@ -8,7 +8,10 @@ export type ItemActivityType =
   | "IMAGE_DELETED"
   | "IMAGES_REORDERED"
   | "RESOLUTION_NOTE"
-  | "STATUS_CHANGE";
+  | "STATUS_CHANGE"
+  | "REVIEW_SUBMITTED"
+  | "REVIEW_APPROVED"
+  | "REVIEW_REJECTED";
 export type CategoryKind = "issue" | "feature" | "other";
 export type PromptTemplateKind = CategoryKind;
 export type UserRole = "ADMIN" | "USER";

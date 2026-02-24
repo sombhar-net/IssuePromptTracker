@@ -39,6 +39,7 @@ curl -sS \
 ```
 
 `issues[*].prompt` is included by default. Set `includePrompts=false` for lighter payloads.
+`status` can include `in_review` for agent submissions awaiting human approval.
 
 ## Agent Issue Detail
 ### `GET /api/agent/v1/issues/:id`
@@ -80,16 +81,32 @@ curl -L \
 ## Agent Resolve Endpoint
 ### `POST /api/agent/v1/issues/:id/resolve`
 Body:
-- `status`: `resolved` or `archived`
-- `resolutionNote`: non-empty text
+- `chatSessionId`: non-empty string
+- `resolutionNote`: non-empty implementation summary
+- `codeChanges`: non-empty code-change summary
+- `commandOutputs`: non-empty array of command/output records
+- `testSummary` (optional): test and verification summary
 
 ```bash
 curl -sS -X POST \
   -H "X-AAM-API-Key: $AAM_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"status":"resolved","resolutionNote":"Patched null dereference in checkout submission flow."}' \
+  -d '{
+    "chatSessionId":"chatcmpl_abc123",
+    "resolutionNote":"Fixed null dereference in checkout submission flow.",
+    "codeChanges":"Updated checkout validator and submit handler; added null guards.",
+    "commandOutputs":[
+      {"command":"npm run test -w apps/web","output":"Test Files 12 passed","exitCode":0},
+      {"command":"npm run build -w apps/web","output":"Build success","exitCode":0}
+    ],
+    "testSummary":"Web tests and build both pass."
+  }' \
   http://localhost:4000/api/agent/v1/issues/<issueId>/resolve
 ```
+
+Behavior:
+- Agent resolve now moves issues into `in_review` status (human approval required).
+- Closed issues (`resolved`, `archived`) cannot be re-resolved by agent keys.
 
 ## Agent Activities Feed (Project)
 ### `GET /api/agent/v1/activities`
@@ -116,8 +133,8 @@ Response shape:
       "itemId": "clx...",
       "type": "STATUS_CHANGE",
       "actorType": "AGENT",
-      "message": "Status changed from open to resolved",
-      "metadata": { "from": "open", "to": "resolved" },
+      "message": "Status changed from open to in_review",
+      "metadata": { "from": "open", "to": "in_review" },
       "createdAt": "2026-02-24T15:40:55.000Z",
       "actor": { "kind": "agent", "keyId": "clx...", "name": "codex-prod", "prefix": "a1b2c3d4" },
       "item": { "id": "clx...", "title": "Checkout crashes", "type": "issue", "projectId": "clx..." }
@@ -143,5 +160,6 @@ curl -sS \
 ## User Activities Endpoints (JWT)
 - `GET /api/items/:id/activities`
 - `GET /api/activities?projectId=<id>`
+- `POST /api/items/:id/review` (`approve` -> `resolved`, `reject` -> `in_progress`, only when status is `in_review`)
 
 These power the web timeline and can be used by trusted user-token automation.

@@ -147,21 +147,29 @@ header = "X-AAM-API-Key: ${AAM_API_KEY}"
 EOF
 ```
 
-## 5. Resolving Work
+## 5. Submit For Human Review
 
 Resolution contract:
 
 - endpoint: `POST /agent/v1/issues/:id/resolve`
 - body:
-  - `status`: `resolved` or `archived`
+  - `chatSessionId`: non-empty chat/session identifier
   - `resolutionNote`: non-empty technical summary
+  - `codeChanges`: comprehensive code-change details
+  - `commandOutputs`: non-empty array of command + output evidence
+  - `testSummary` (optional): test/build verification summary
+
+Behavior:
+
+- Agent resolve transitions issue status to `in_review`.
+- Only human users can finalize approval (`resolved`) or rejection (`in_progress`).
 
 Example:
 
 ```bash
 aam_post_json \
   "${base_url}/agent/v1/issues/${ISSUE_ID}/resolve" \
-  '{"status":"resolved","resolutionNote":"Updated validation flow, added test coverage, and verified build/test pass."}'
+  '{"chatSessionId":"chatcmpl_abc123","resolutionNote":"Updated validation flow and fixed null guards.","codeChanges":"Modified checkout validator, submission hook, and loading-state guard. Added regression tests for empty payload and stale state.","commandOutputs":[{"command":"npm run test -w apps/web","output":"Test Files 12 passed","exitCode":0},{"command":"npm run build -w apps/web","output":"Build success","exitCode":0}],"testSummary":"Web tests and build both pass."}'
 ```
 
 ## 6. Failure Handling
@@ -192,8 +200,8 @@ aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}/work-context"
 
 # 4) download all images listed in work-context before implementing/resolving
 
-# 5) mark complete
+# 5) submit for human review
 aam_post_json \
   "${base_url}/agent/v1/issues/${ISSUE_ID}/resolve" \
-  '{"status":"resolved","resolutionNote":"Implemented fix and validated behavior."}'
+  '{"chatSessionId":"chatcmpl_abc123","resolutionNote":"Implemented fix and validated behavior.","codeChanges":"Updated service guard and validation logic.","commandOutputs":[{"command":"npm run test -w apps/web","output":"all tests passed","exitCode":0}]}'
 ```

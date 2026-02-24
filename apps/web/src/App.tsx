@@ -43,6 +43,7 @@ import {
   getPromptTemplates,
   getProjects,
   login as loginUser,
+  reviewItem,
   revokeProjectAgentKey,
   register as registerUser,
   updateCategory,
@@ -88,7 +89,7 @@ type ItemFormErrors = Partial<Record<ItemFormField, string>>;
 type IssueFormTab = "details" | "prompt" | "activity";
 
 const ITEM_TYPES: ItemType[] = ["issue", "feature"];
-const ITEM_STATUSES: ItemStatus[] = ["open", "in_progress", "resolved", "archived"];
+const ITEM_STATUSES: ItemStatus[] = ["open", "in_progress", "in_review", "resolved", "archived"];
 const ITEM_PRIORITIES: ItemPriority[] = ["low", "medium", "high", "critical"];
 const ITEM_ACTIVITY_TYPES: ItemActivityType[] = [
   "ITEM_CREATED",
@@ -97,7 +98,10 @@ const ITEM_ACTIVITY_TYPES: ItemActivityType[] = [
   "IMAGE_DELETED",
   "IMAGES_REORDERED",
   "RESOLUTION_NOTE",
-  "STATUS_CHANGE"
+  "STATUS_CHANGE",
+  "REVIEW_SUBMITTED",
+  "REVIEW_APPROVED",
+  "REVIEW_REJECTED"
 ];
 const CATEGORY_KINDS: CategoryKind[] = ["issue", "feature", "other"];
 const PROMPT_TEMPLATE_KINDS: PromptTemplateKind[] = ["issue", "feature", "other"];
@@ -224,6 +228,76 @@ function formatActivityActor(activity: ItemActivity): string {
   }
 
   return activity.actor.displayName || activity.actor.email || "User";
+}
+
+interface AgentReviewCommandOutput {
+  command: string;
+  output: string;
+  exitCode?: number;
+}
+
+interface AgentReviewSubmissionMetadata {
+  chatSessionId: string;
+  resolutionNote: string;
+  codeChanges: string;
+  commandOutputs: AgentReviewCommandOutput[];
+  testSummary?: string | null;
+}
+
+function parseAgentReviewSubmissionMetadata(
+  metadata: ItemActivity["metadata"]
+): AgentReviewSubmissionMetadata | null {
+  if (!metadata || typeof metadata !== "object") {
+    return null;
+  }
+
+  const rawChatSessionId = metadata.chatSessionId;
+  const rawResolutionNote = metadata.resolutionNote;
+  const rawCodeChanges = metadata.codeChanges;
+  const rawCommandOutputs = metadata.commandOutputs;
+  const rawTestSummary = metadata.testSummary;
+
+  if (
+    typeof rawChatSessionId !== "string" ||
+    typeof rawResolutionNote !== "string" ||
+    typeof rawCodeChanges !== "string" ||
+    !Array.isArray(rawCommandOutputs)
+  ) {
+    return null;
+  }
+
+  const commandOutputs: AgentReviewCommandOutput[] = [];
+  for (const entry of rawCommandOutputs) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const command = (entry as { command?: unknown }).command;
+    const output = (entry as { output?: unknown }).output;
+    const exitCode = (entry as { exitCode?: unknown }).exitCode;
+
+    if (typeof command !== "string" || typeof output !== "string") {
+      continue;
+    }
+
+    commandOutputs.push({
+      command,
+      output,
+      ...(typeof exitCode === "number" ? { exitCode } : {})
+    });
+  }
+
+  if (commandOutputs.length === 0) {
+    return null;
+  }
+
+  return {
+    chatSessionId: rawChatSessionId,
+    resolutionNote: rawResolutionNote,
+    codeChanges: rawCodeChanges,
+    commandOutputs,
+    testSummary: typeof rawTestSummary === "string" ? rawTestSummary : null
+  };
 }
 
 function escapeHtml(value: string): string {
@@ -884,7 +958,11 @@ function AgentDocsPage(props: AgentDocsPageProps = {}): JSX.Element {
             <li>Bootstrap context with `GET /api/agent/v1/project`.</li>
             <li>Fetch `GET /api/agent/v1/issues/:id` and use `issue.prompt.text` (included by default) as execution context.</li>
             <li>Poll `GET /api/agent/v1/activities` using `cursor` + `limit`.</li>
-            <li>Resolve work with `POST /api/agent/v1/issues/:id/resolve` including `resolutionNote`.</li>
+            <li>
+              Submit implementation for review with `POST /api/agent/v1/issues/:id/resolve` including
+              `chatSessionId`, `resolutionNote`, `codeChanges`, and `commandOutputs`.
+            </li>
+            <li>Approve or reject in-app from `/reviews` (backed by `POST /api/items/:id/review`).</li>
           </ol>
         </article>
 
@@ -896,7 +974,11 @@ function AgentDocsPage(props: AgentDocsPageProps = {}): JSX.Element {
             <li>Design your agent around the prompt-first loop: human says "fix this/that issue", agent fetches issue, executes from `issue.prompt.text`.</li>
             <li>Implement idempotent activity handling keyed by immutable `activity.id`.</li>
             <li>Fetch issue details on relevant activity types (`STATUS_CHANGE`, `ITEM_UPDATED`, `IMAGE_*`).</li>
-            <li>Execute coding task, then submit `resolve` with concise technical note.</li>
+            <li>
+              Execute coding task, then submit `resolve` with full evidence: `chatSessionId`, `resolutionNote`,
+              `codeChanges`, and command outputs.
+            </li>
+            <li>Human reviewer approves/rejects from `/reviews`; reject returns item to In Progress for rework.</li>
             <li>Persist `nextCursor` only after successful processing of each page.</li>
           </ol>
         </article>
@@ -975,6 +1057,7 @@ GET /api/agent/v1/issues/:id/activities
 GET /api/agent/v1/activities
 GET /api/agent/v1/issues/:id/prompt (optional fallback)
 POST /api/agent/v1/issues/:id/resolve
+POST /api/items/:id/review (human approve/reject)
 GET /api/agent/v1/docs.md`}</pre>
         </article>
 
@@ -3568,6 +3651,391 @@ function ActivityPage(props: ActivityPageProps): JSX.Element {
   );
 }
 
+interface ReviewPageProps {
+  selectedProjectId: string;
+  selectedProjectName: string;
+  reportError: ReportError;
+  reportNotice: ReportNotice;
+}
+
+function ReviewPage(props: ReviewPageProps): JSX.Element {
+  const { selectedProjectId, selectedProjectName, reportError, reportNotice } = props;
+  const navigate = useNavigate();
+  const [queueItems, setQueueItems] = useState<Item[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [submissionActivity, setSubmissionActivity] = useState<ItemActivity | null>(null);
+  const [timelineActivities, setTimelineActivities] = useState<ItemActivity[]>([]);
+  const [timelineCursor, setTimelineCursor] = useState<string | null>(null);
+  const [loadingQueue, setLoadingQueue] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [reviewNote, setReviewNote] = useState("");
+
+  const selectedItem = useMemo(
+    () => queueItems.find((item) => item.id === selectedItemId) ?? null,
+    [queueItems, selectedItemId]
+  );
+  const submissionMetadata = useMemo(
+    () => parseAgentReviewSubmissionMetadata(submissionActivity?.metadata || null),
+    [submissionActivity]
+  );
+
+  async function loadQueue(preferredItemId?: string | null): Promise<void> {
+    if (!selectedProjectId) {
+      setQueueItems([]);
+      setSelectedItemId(null);
+      return;
+    }
+
+    try {
+      setLoadingQueue(true);
+      const inReviewItems = await getItems(selectedProjectId, {
+        status: "in_review",
+        type: "issue"
+      });
+      setQueueItems(inReviewItems);
+
+      const candidateId = preferredItemId ?? selectedItemId;
+      const nextSelectedId =
+        candidateId && inReviewItems.some((item) => item.id === candidateId)
+          ? candidateId
+          : inReviewItems[0]?.id || null;
+      setSelectedItemId(nextSelectedId);
+    } catch (error) {
+      reportError(error, "Failed to load review queue");
+    } finally {
+      setLoadingQueue(false);
+    }
+  }
+
+  async function loadSubmission(itemId: string): Promise<void> {
+    try {
+      const response = await getItemActivities(itemId, {
+        type: "REVIEW_SUBMITTED",
+        limit: 20
+      });
+      const latestAgentSubmission =
+        response.activities.find((activity) => activity.actor.kind === "agent") || null;
+      setSubmissionActivity(latestAgentSubmission);
+    } catch (error) {
+      reportError(error, "Failed to load latest AI submission");
+    }
+  }
+
+  async function loadTimeline(
+    itemId: string,
+    options?: { append?: boolean; cursor?: string | null }
+  ): Promise<void> {
+    const append = Boolean(options?.append);
+    const cursor = options?.cursor ?? (append ? timelineCursor : null);
+
+    try {
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoadingDetail(true);
+      }
+
+      const response = await getItemActivities(itemId, {
+        limit: 25,
+        cursor: cursor || undefined
+      });
+
+      setTimelineActivities((current) =>
+        append ? [...current, ...response.activities] : response.activities
+      );
+      setTimelineCursor(response.page.nextCursor);
+    } catch (error) {
+      reportError(error, "Failed to load review activity timeline");
+    } finally {
+      setLoadingDetail(false);
+      setLoadingMore(false);
+    }
+  }
+
+  async function loadSelectedDetails(itemId: string): Promise<void> {
+    await Promise.all([loadSubmission(itemId), loadTimeline(itemId)]);
+  }
+
+  useEffect(() => {
+    setQueueItems([]);
+    setSelectedItemId(null);
+    setSubmissionActivity(null);
+    setTimelineActivities([]);
+    setTimelineCursor(null);
+    setReviewNote("");
+
+    if (!selectedProjectId) {
+      return;
+    }
+
+    void loadQueue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (!selectedItemId) {
+      setSubmissionActivity(null);
+      setTimelineActivities([]);
+      setTimelineCursor(null);
+      return;
+    }
+
+    void loadSelectedDetails(selectedItemId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItemId]);
+
+  async function approveSelected(): Promise<void> {
+    if (!selectedItemId) {
+      return;
+    }
+
+    try {
+      setActionBusy(true);
+      const note = reviewNote.trim();
+      await reviewItem(selectedItemId, {
+        decision: "approve",
+        reviewNote: note || undefined
+      });
+      setReviewNote("");
+      reportNotice("AI submission approved. Issue moved to resolved.");
+      await loadQueue(selectedItemId);
+    } catch (error) {
+      reportError(error, "Failed to approve review submission");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function rejectSelected(): Promise<void> {
+    if (!selectedItemId) {
+      return;
+    }
+
+    const note = reviewNote.trim();
+    if (!note) {
+      reportError(undefined, "Add a review note before rejecting.");
+      return;
+    }
+
+    try {
+      setActionBusy(true);
+      await reviewItem(selectedItemId, {
+        decision: "reject",
+        reviewNote: note
+      });
+      setReviewNote("");
+      reportNotice("AI submission rejected. Issue moved to in progress.");
+      await loadQueue(selectedItemId);
+    } catch (error) {
+      reportError(error, "Failed to reject review submission");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  if (!selectedProjectId) {
+    return (
+      <section className="page-section">
+        <article className="panel-card">
+          <h2>No Project Selected</h2>
+          <p className="helper">Select a project on the Projects page to review AI submissions.</p>
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="page-section">
+      <header className="section-head">
+        <div>
+          <p className="kicker">Review Queue</p>
+          <h2>{selectedProjectName}</h2>
+          <p className="helper">Approve or reject AI-submitted fixes currently in review.</p>
+        </div>
+        <button
+          className="button-with-icon"
+          disabled={loadingQueue || loadingDetail || loadingMore || actionBusy}
+          onClick={() => void loadQueue(selectedItemId)}
+          type="button"
+        >
+          <AppIcon name="refresh" />
+          Refresh Queue
+        </button>
+      </header>
+
+      {loadingQueue && <p className="helper">Loading review queue...</p>}
+
+      {!loadingQueue && queueItems.length === 0 && (
+        <article className="panel-card">
+          <h3>No Items In Review</h3>
+          <p className="helper">Agent submissions will appear here after they are moved to In Review.</p>
+        </article>
+      )}
+
+      {!loadingQueue && queueItems.length > 0 && (
+        <article className="panel-card review-layout">
+          <div className="review-list">
+            {queueItems.map((item) => (
+              <button
+                className={`review-item ${selectedItemId === item.id ? "active" : ""}`}
+                key={item.id}
+                onClick={() => setSelectedItemId(item.id)}
+                type="button"
+              >
+                <strong>{item.title || "Untitled issue"}</strong>
+                <span>
+                  {titleize(item.priority)} · {formatDateTime(item.updatedAt)}
+                </span>
+                <span className="helper">{item.description || "No description provided."}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="review-main">
+            {!selectedItem && <p className="helper">Select an issue from the review queue.</p>}
+
+            {selectedItem && (
+              <>
+                <article className="panel-card">
+                  <div className="section-head">
+                    <div>
+                      <h3>{selectedItem.title || "Untitled issue"}</h3>
+                      <p className="helper">
+                        Status: {titleize(selectedItem.status)} · Priority: {titleize(selectedItem.priority)}
+                      </p>
+                    </div>
+                    <button
+                      className="button-with-icon"
+                      onClick={() => navigate(`/issues/${selectedItem.id}/edit`)}
+                      type="button"
+                    >
+                      <AppIcon name="edit" />
+                      Open Item
+                    </button>
+                  </div>
+                  <p>{selectedItem.description || "No description provided."}</p>
+                  <p className="helper">
+                    Tags: {selectedItem.tags.length > 0 ? selectedItem.tags.join(", ") : "none"}
+                  </p>
+                </article>
+
+                <article className="panel-card">
+                  <h3>Latest AI Submission</h3>
+                  {!submissionActivity && <p className="helper">No AI review submission activity found yet.</p>}
+                  {submissionActivity && !submissionMetadata && (
+                    <>
+                      <p>{submissionActivity.message}</p>
+                      <p className="helper">
+                        Submission metadata is missing structured details. Ask the agent to resubmit with command output and chat session id.
+                      </p>
+                    </>
+                  )}
+                  {submissionActivity && submissionMetadata && (
+                    <div className="review-submission">
+                      <p className="helper">
+                        Submitted: {formatDateTime(submissionActivity.createdAt)} · Actor: {formatActivityActor(submissionActivity)}
+                      </p>
+                      <p>
+                        <strong>Chat Session ID:</strong>{" "}
+                        <code className="review-session-id">{submissionMetadata.chatSessionId}</code>
+                      </p>
+                      <div>
+                        <h4>Resolution Summary</h4>
+                        <p>{submissionMetadata.resolutionNote}</p>
+                      </div>
+                      <div>
+                        <h4>Code Changes</h4>
+                        <pre>{submissionMetadata.codeChanges}</pre>
+                      </div>
+                      {submissionMetadata.testSummary && (
+                        <div>
+                          <h4>Test Summary</h4>
+                          <pre>{submissionMetadata.testSummary}</pre>
+                        </div>
+                      )}
+                      <div>
+                        <h4>Command Outputs</h4>
+                        <div className="review-command-list">
+                          {submissionMetadata.commandOutputs.map((entry, index) => (
+                            <details className="review-command-card" key={`${entry.command}-${index}`}>
+                              <summary>
+                                <code>{entry.command}</code>
+                                {typeof entry.exitCode === "number" && (
+                                  <span className="tag-chip">exit {entry.exitCode}</span>
+                                )}
+                              </summary>
+                              <pre>{entry.output}</pre>
+                            </details>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </article>
+
+                <article className="panel-card">
+                  <h3>Review Decision</h3>
+                  <label>
+                    Reviewer note
+                    <textarea
+                      placeholder="Add approval context or required rework details"
+                      rows={5}
+                      value={reviewNote}
+                      onChange={(event) => setReviewNote(event.target.value)}
+                    />
+                  </label>
+                  <p className="helper">
+                    Approve moves status to Resolved. Reject moves status back to In Progress and requires a note.
+                  </p>
+                  <div className="inline-actions">
+                    <button
+                      className="primary button-with-icon"
+                      disabled={actionBusy}
+                      onClick={() => void approveSelected()}
+                      type="button"
+                    >
+                      <AppIcon name="save" />
+                      Approve
+                    </button>
+                    <button
+                      className="danger button-with-icon"
+                      disabled={actionBusy || reviewNote.trim().length === 0}
+                      onClick={() => void rejectSelected()}
+                      type="button"
+                    >
+                      <AppIcon name="cancel" />
+                      Reject
+                    </button>
+                  </div>
+                </article>
+
+                <article className="panel-card">
+                  <h3>Timeline</h3>
+                  <ActivityTimeline
+                    activities={timelineActivities}
+                    emptyMessage="No activity recorded for this item yet."
+                    hasMore={Boolean(timelineCursor)}
+                    loading={loadingDetail}
+                    loadingMore={loadingMore}
+                    onLoadMore={() =>
+                      void loadTimeline(selectedItem.id, {
+                        append: true,
+                        cursor: timelineCursor
+                      })
+                    }
+                  />
+                </article>
+              </>
+            )}
+          </div>
+        </article>
+      )}
+    </section>
+  );
+}
+
 function PromptsPage(props: PromptsPageProps): JSX.Element {
   const { selectedProjectId, selectedProjectName, categories, reportError, reportNotice } = props;
 
@@ -4216,6 +4684,7 @@ function AppShell(props: ShellProps): JSX.Element {
 
   const navItems = [
     { to: "/issues", label: "Issues" },
+    { to: "/reviews", label: "Reviews" },
     { to: "/activity", label: "Activity" },
     { to: "/agentic-coding", label: "Agent Docs" },
     { to: "/projects", label: "Projects" },
@@ -4321,6 +4790,17 @@ function AppShell(props: ShellProps): JSX.Element {
 
         <div className="route-host">
           <Routes>
+            <Route
+              path="/reviews"
+              element={
+                <ReviewPage
+                  selectedProjectId={selectedProjectId}
+                  selectedProjectName={selectedProject?.name || "No Project"}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
             <Route
               path="/activity"
               element={

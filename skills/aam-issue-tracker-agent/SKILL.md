@@ -1,6 +1,6 @@
 ---
 name: aam-issue-tracker-agent
-description: Use Issue Prompt Tracker agent APIs to build or operate prompt-first coding automations with API-key auth, including project bootstrap, activity polling, issue detail fetches with default embedded prompts, image retrieval, and resolution updates. Trigger this skill when tasks involve /api/agent/v1 endpoints, X-AAM-API-Key usage, cursor-based polling, or creating/updating an agent skill integration for this tracker.
+description: Use Issue Prompt Tracker agent APIs to build or operate prompt-first coding automations with API-key auth, including project bootstrap, activity polling, issue detail fetches with default embedded prompts, image retrieval, and human-review submission updates. Trigger this skill when tasks involve /api/agent/v1 endpoints, X-AAM-API-Key usage, cursor-based polling, or creating/updating an agent skill integration for this tracker.
 ---
 
 # AAM Issue Tracker Agent
@@ -39,8 +39,10 @@ description: Use Issue Prompt Tracker agent APIs to build or operate prompt-firs
 5. Fetch supporting context only when needed
    - Use `GET /agent/v1/issues/:id/activities` for timeline/audit context.
    - Use `GET /agent/v1/issues/:id/prompt` only as fallback when pre-action context endpoint is unavailable.
-6. Complete work and update tracker
-   - Use `POST /agent/v1/issues/:id/resolve` with `status` (`resolved` or `archived`) and a non-empty `resolutionNote`.
+6. Complete work and submit for human review
+   - Use `POST /agent/v1/issues/:id/resolve` to move status to `in_review`.
+   - Include `chatSessionId`, `resolutionNote`, `codeChanges`, and `commandOutputs`.
+   - Humans finalize via review approval/rejection.
 
 ## Reliability Rules
 
@@ -77,7 +79,7 @@ url = "${base_url}/agent/v1/issues/${ISSUE_ID}/images/${image_id}"
 header = "X-AAM-API-Key: ${AAM_API_KEY}"
 EOF
 done
-curl -sS --fail --config - --data '{"status":"resolved","resolutionNote":"Implemented fix and validated behavior."}' <<EOF
+curl -sS --fail --config - --data '{"chatSessionId":"chatcmpl_abc123","resolutionNote":"Implemented fix and validated behavior.","codeChanges":"Updated handler and tests.","commandOutputs":[{"command":"npm run test -w apps/web","output":"all tests passed","exitCode":0}]}' <<EOF
 url = "${base_url}/agent/v1/issues/${ISSUE_ID}/resolve"
 request = "POST"
 header = "X-AAM-API-Key: ${AAM_API_KEY}"
