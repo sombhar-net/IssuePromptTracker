@@ -96,16 +96,37 @@ aam_get "${base_url}/agent/v1/activities?limit=50&since=2026-02-24T00:00:00.000Z
 
 ## 4. Prompt-First Issue Execution
 
-Fetch only for activities you need to act on:
+For implementation tasks, first load mandatory pre-action context:
 
 ```bash
-aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}"
+aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}/work-context"
 ```
 
-By default, `issue.prompt` is embedded in issue payloads. Build your execution plan from:
+Build your execution plan from:
 
 - `issue.prompt.text` for instructions
 - `issue.prompt.yaml` for structured context
+
+Then download every attachment before coding/resolving:
+
+```bash
+context_json="$(aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}/work-context")"
+printf "%s" "${context_json}" | python3 -c '
+import json
+import sys
+payload = json.load(sys.stdin)
+for image in payload.get("issue", {}).get("images", []):
+    image_id = image.get("id", "")
+    if image_id:
+        print(image_id)
+' | while IFS= read -r image_id; do
+  [[ -n "${image_id}" ]] || continue
+  curl -sS -L --fail --config - -o "issue-${ISSUE_ID}-${image_id}.png" <<EOF
+url = "${base_url}/agent/v1/issues/${ISSUE_ID}/images/${image_id}"
+header = "X-AAM-API-Key: ${AAM_API_KEY}"
+EOF
+done
+```
 
 Prompt-only fallback fetch:
 
@@ -113,7 +134,7 @@ Prompt-only fallback fetch:
 aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}/prompt"
 ```
 
-Only use `includePrompts=false` when you intentionally need lighter issue payloads.
+Only use `includePrompts=false` when you intentionally need lighter issue payloads and are not in an implementation flow.
 
 Image fetch:
 
@@ -166,10 +187,12 @@ aam_get "${base_url}/agent/v1/project"
 # 2) poll one page
 aam_get "${base_url}/agent/v1/activities?limit=50"
 
-# 3) inspect issue
-aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}"
+# 3) inspect issue with required pre-action context
+aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}/work-context"
 
-# 4) mark complete
+# 4) download all images listed in work-context before implementing/resolving
+
+# 5) mark complete
 aam_post_json \
   "${base_url}/agent/v1/issues/${ISSUE_ID}/resolve" \
   '{"status":"resolved","resolutionNote":"Implemented fix and validated behavior."}'

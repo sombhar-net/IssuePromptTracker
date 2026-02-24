@@ -29,14 +29,17 @@ description: Use Issue Prompt Tracker agent APIs to build or operate prompt-firs
 2. Poll changes
    - Call `GET /agent/v1/activities?limit=50&cursor=<cursor>`.
    - Persist `nextCursor` after successful page processing.
-3. Prompt-first execution for "fix this/that issue"
-   - Use `GET /agent/v1/issues/:id`; prompt data is included by default in `issue.prompt`.
+3. Load mandatory pre-action context for "fix this/that issue"
+   - Call `GET /agent/v1/issues/:id/work-context` first.
    - Treat `issue.prompt.text` as primary implementation context.
-4. Fetch supporting context only when needed
+   - Treat `issue.prompt.yaml` as structured source-of-truth input.
+4. Download and review all attachments before coding
+   - For every image in `issue.images`, call `GET /agent/v1/issues/:issueId/images/:imageId`.
+   - If image fetch fails, stop and report instead of proceeding with partial context.
+5. Fetch supporting context only when needed
    - Use `GET /agent/v1/issues/:id/activities` for timeline/audit context.
-   - Fetch images via `GET /agent/v1/issues/:issueId/images/:imageId`.
-   - Use `GET /agent/v1/issues/:id/prompt` only as a fallback if prompt embedding is disabled.
-5. Complete work and update tracker
+   - Use `GET /agent/v1/issues/:id/prompt` only as fallback when pre-action context endpoint is unavailable.
+6. Complete work and update tracker
    - Use `POST /agent/v1/issues/:id/resolve` with `status` (`resolved` or `archived`) and a non-empty `resolutionNote`.
 
 ## Reliability Rules
@@ -46,6 +49,7 @@ description: Use Issue Prompt Tracker agent APIs to build or operate prompt-firs
 - Do not retry validation/auth failures (`4xx`) blindly.
 - Reset polling with `since=<ISO timestamp>` if server returns `Invalid cursor`.
 - When using `since`, expect replay at the boundary and dedupe with activity `id`.
+- Never edit code or post `/resolve` until prompt and all images are loaded.
 - Never log full API keys.
 
 ## Command Patterns
@@ -66,7 +70,13 @@ EOF
 
 aam_get "${base_url}/agent/v1/project"
 aam_get "${base_url}/agent/v1/activities?limit=50"
-aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}"
+aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}/work-context"
+for image_id in $(aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}/work-context" | python3 -c 'import json,sys; payload=json.load(sys.stdin); print("\\n".join(img["id"] for img in payload.get("issue",{}).get("images",[])))'); do
+  curl -sS --fail --config - -o "issue-${ISSUE_ID}-${image_id}.bin" <<EOF
+url = "${base_url}/agent/v1/issues/${ISSUE_ID}/images/${image_id}"
+header = "X-AAM-API-Key: ${AAM_API_KEY}"
+EOF
+done
 curl -sS --fail --config - --data '{"status":"resolved","resolutionNote":"Implemented fix and validated behavior."}' <<EOF
 url = "${base_url}/agent/v1/issues/${ISSUE_ID}/resolve"
 request = "POST"

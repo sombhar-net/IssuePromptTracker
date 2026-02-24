@@ -2774,6 +2774,47 @@ app.get("/api/agent/v1/issues/:id", async (request, reply) => {
   return { issue };
 });
 
+app.get("/api/agent/v1/issues/:id/work-context", async (request, reply) => {
+  const agentAuth = getAgentAuth(request);
+  const params = z.object({ id: z.string().min(1) }).parse(request.params);
+  const query = z
+    .object({
+      includeImagesInline: queryBooleanSchema.optional().default(false)
+    })
+    .parse(request.query);
+
+  const item = await prisma.item.findFirst({
+    where: {
+      id: params.id,
+      projectId: agentAuth.projectId
+    },
+    include: itemWithRelationsInclude
+  });
+
+  if (!item) {
+    return reply.status(404).send({ message: "Issue not found" });
+  }
+
+  const templates = await getProjectPromptTemplateSet(agentAuth.projectId);
+  const issue = await buildAgentIssuePayload(item, {
+    includePrompts: true,
+    includeImagesInline: query.includeImagesInline,
+    templates
+  });
+
+  return {
+    issue,
+    preActionChecklist: {
+      required: [
+        "Read issue.prompt.text",
+        "Read issue.prompt.yaml",
+        "Download and review every entry in issue.images before implementing or resolving"
+      ],
+      imageCount: issue.images.length
+    }
+  };
+});
+
 app.get("/api/agent/v1/issues/:id/activities", async (request, reply) => {
   const agentAuth = getAgentAuth(request);
   const params = z.object({ id: z.string().min(1) }).parse(request.params);

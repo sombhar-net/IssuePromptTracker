@@ -469,3 +469,36 @@ When making changes, append an entry to **Change Log** below with:
   - `npm run build -w apps/api`
   - `npm run build -w apps/web`
   - `npm run test`
+- 2026-02-24
+- Improved default prompt templates in `packages/shared/src/prompt.ts` for stronger AI task execution quality:
+  - expanded `issue`, `feature`, and `other` defaults with explicit role framing and structured response sections
+  - added `WORKING_RULES` blocks instructing the model to avoid guessing and ask clarifying questions when context is ambiguous/conflicting/incomplete
+  - upgraded requested-output instructions to require implementation-ready plans plus clarifying-question behavior when needed
+- Improved YAML prompt metadata guidance:
+  - `prompt.constraints` now explicitly requires targeted clarification questions before final recommendations when context is unclear
+  - `prompt.requested_output` now varies by template kind (`issue`/`feature`/`other`) and includes clarification guidance
+- Expanded shared prompt tests in `packages/shared/test/prompt.test.ts`:
+  - validates new structured sections and clarification language in rendered prompt text
+  - validates clarification behavior in YAML constraints/requested output
+  - validates feature-specific requested-output guidance
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run test -w packages/shared`
+  - `npm run build -w packages/shared`
+- 2026-02-24
+- Enforced prompt-and-attachments-first agent workflow in skill guidance and API surface:
+  - updated `skills/aam-issue-tracker-agent/SKILL.md` with a hard pre-action gate requiring prompt + all images before implementation/resolution
+  - updated `skills/aam-issue-tracker-agent/references/api-usage.md` command flow to load work-context first and download all listed images before resolving
+  - updated `skills/aam-issue-tracker-agent/agents/openai.yaml` default prompt to require pre-action context and image review
+  - added agent endpoint `GET /api/agent/v1/issues/:id/work-context` returning issue detail + prompt + explicit pre-action checklist
+  - updated agent docs:
+    - `apps/api/docs/agent-api-reference.md`
+    - `apps/api/docs/agentic-coding.md`
+    - `apps/api/docs/agent-polling-playbook.md`
+  - repackaged `apps/web/public/skills/aam-issue-tracker-agent.zip`
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/api`
+  - `python3 /home/astinaam/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/aam-issue-tracker-agent`
+  - `npm run skills:package -- aam-issue-tracker-agent`
+  - `curl -sS -H "X-AAM-API-Key: $AAM_API_KEY" "$AAM_API_BASE_URL/api/agent/v1/issues/<issueId>/work-context"`

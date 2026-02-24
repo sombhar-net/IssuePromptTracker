@@ -28,6 +28,8 @@ describe("prompt builders", () => {
     expect(text).toContain("[GOAL]");
     expect(text).toContain("Project: Checkout");
     expect(text).toContain("images/item_1/screen_1.png");
+    expect(text).toContain("[WORKING_RULES]");
+    expect(text).toContain("Clarifying Questions");
   });
 
   it("builds yaml record", () => {
@@ -37,6 +39,18 @@ describe("prompt builders", () => {
     expect(yamlRecord.prompt.goal).toContain("issue");
     expect(yamlRecord.prompt_text).toContain("Submit button blocked");
     expect(yamlRecord.prompt_template_kind).toBe("issue");
+    expect(yamlRecord.prompt.constraints).toContain("ask targeted clarifying questions");
+    expect(yamlRecord.prompt.requested_output).toContain("clarifying questions");
+  });
+
+  it("uses feature-specific requested output guidance", () => {
+    const featureRecord = buildItemYamlRecord({
+      ...sample,
+      type: "feature"
+    });
+
+    expect(featureRecord.prompt.requested_output).toContain("acceptance criteria");
+    expect(featureRecord.prompt.requested_output).toContain("clarifying questions");
   });
 
   it("renders a custom template with placeholders", () => {

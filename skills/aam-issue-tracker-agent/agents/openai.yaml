@@ -1,4 +1,4 @@
 interface:
   display_name: "AAM Issue Tracker Agent"
   short_description: "Prompt-first workflows for AAM issue tracker APIs"
-  default_prompt: "Use this skill to resolve tracker issues from issue.prompt context by default, then write resolution notes back to the tracker."
+  default_prompt: "Use this skill with a hard pre-action gate: load /agent/v1/issues/:id/work-context, download and review every listed image, then implement and resolve with a clear resolution note."

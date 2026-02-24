@@ -50,6 +50,16 @@ curl -sS \
 
 `issue.prompt` is included by default. Use `includePrompts=false` to suppress prompt data.
 
+## Agent Work Context (Recommended pre-action gate)
+### `GET /api/agent/v1/issues/:id/work-context`
+Returns issue detail with prompt embedded plus a pre-action checklist to enforce prompt+image review before implementation/resolution.
+
+```bash
+curl -sS \
+  -H "X-AAM-API-Key: $AAM_API_KEY" \
+  "http://localhost:4000/api/agent/v1/issues/<issueId>/work-context"
+```
+
 ## Agent Prompt for One Issue
 ### `GET /api/agent/v1/issues/:id/prompt`
 ```bash

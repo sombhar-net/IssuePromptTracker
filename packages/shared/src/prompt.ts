@@ -66,6 +66,9 @@ export const PROMPT_TEMPLATE_PLACEHOLDERS: PromptTemplatePlaceholder[] = [
 ];
 
 const DEFAULT_ISSUE_TEMPLATE = [
+  "[ROLE]",
+  "You are a senior software engineer fixing a real issue.",
+  "",
   "[GOAL]",
   "Investigate and resolve this issue with implementation-ready guidance.",
   "",
@@ -76,7 +79,7 @@ const DEFAULT_ISSUE_TEMPLATE = [
   "Priority: {{item.priority}}",
   "Tags: {{item.tags}}",
   "",
-  "[PROBLEM_SUMMARY]",
+  "[ISSUE_CONTEXT]",
   "Title: {{item.title}}",
   "Description:",
   "{{item.description}}",
@@ -84,11 +87,25 @@ const DEFAULT_ISSUE_TEMPLATE = [
   "[ATTACHMENTS]",
   "{{attachments.list}}",
   "",
+  "[WORKING_RULES]",
+  "- Use only the provided context; do not invent missing details.",
+  "- When context is ambiguous, conflicting, or incomplete, ask clarifying questions before final recommendations.",
+  "- Keep recommendations actionable, concrete, and scoped to this issue.",
+  "",
   "[REQUESTED_OUTPUT]",
-  "Return likely root causes, concrete fixes with tradeoffs, and a step-by-step implementation plan."
+  "Return sections in this order:",
+  "1. Understanding",
+  "2. Root Cause Hypotheses (with confidence and evidence)",
+  "3. Recommended Fix Plan (step-by-step)",
+  "4. Validation Plan (tests, checks, and regression coverage)",
+  "5. Risks and Rollback Considerations",
+  "6. Clarifying Questions (required when key details are missing)"
 ].join("\n");
 
 const DEFAULT_FEATURE_TEMPLATE = [
+  "[ROLE]",
+  "You are a senior software engineer planning and implementing a feature.",
+  "",
   "[GOAL]",
   "Design and implement this feature request in a practical way.",
   "",
@@ -107,11 +124,26 @@ const DEFAULT_FEATURE_TEMPLATE = [
   "[ATTACHMENTS]",
   "{{attachments.list}}",
   "",
+  "[WORKING_RULES]",
+  "- Use only the provided context; do not invent product requirements.",
+  "- When requirements are ambiguous, ask clarifying questions before final architecture choices.",
+  "- Prefer incremental delivery with clear acceptance criteria.",
+  "",
   "[REQUESTED_OUTPUT]",
-  "Return approach options, implementation details, and an ordered delivery plan."
+  "Return sections in this order:",
+  "1. Understanding",
+  "2. Proposed Scope and Acceptance Criteria",
+  "3. Options and Tradeoffs",
+  "4. Recommended Implementation Plan (ordered milestones)",
+  "5. Testing and Validation Plan",
+  "6. Risks and Dependencies",
+  "7. Clarifying Questions (required when requirements are unclear)"
 ].join("\n");
 
 const DEFAULT_OTHER_TEMPLATE = [
+  "[ROLE]",
+  "You are a senior software engineer handling a project work item.",
+  "",
   "[GOAL]",
   "Analyze this work item and propose the most practical path forward.",
   "",
@@ -131,8 +163,19 @@ const DEFAULT_OTHER_TEMPLATE = [
   "[ATTACHMENTS]",
   "{{attachments.list}}",
   "",
+  "[WORKING_RULES]",
+  "- Use only the provided context; do not invent facts.",
+  "- Ask clarifying questions when the required outcome is not explicit.",
+  "- Keep output practical and implementation-oriented.",
+  "",
   "[REQUESTED_OUTPUT]",
-  "Return a recommended plan, alternatives with tradeoffs, and concrete next actions."
+  "Return sections in this order:",
+  "1. Understanding",
+  "2. Recommended Plan",
+  "3. Alternatives and Tradeoffs",
+  "4. Execution Steps",
+  "5. Risks and Open Questions",
+  "6. Clarifying Questions (required when context is insufficient)"
 ].join("\n");
 
 export const DEFAULT_PROMPT_TEMPLATES: Record<PromptTemplateKind, string> = {
@@ -239,6 +282,18 @@ function promptGoal(templateKind: PromptTemplateKind): string {
   return `Propose a practical solution for this ${templateKind}.`;
 }
 
+function promptRequestedOutput(templateKind: PromptTemplateKind): string {
+  if (templateKind === "issue") {
+    return "Return root cause hypotheses, fixes with tradeoffs, implementation steps, validation checks, and clarifying questions when context is insufficient.";
+  }
+
+  if (templateKind === "feature") {
+    return "Return scope and acceptance criteria, implementation options with tradeoffs, recommended milestones, validation strategy, and clarifying questions when requirements are ambiguous.";
+  }
+
+  return "Return a practical execution plan, alternatives with tradeoffs, and clarifying questions when context or desired outcomes are unclear.";
+}
+
 function buildProblemSummary(item: PromptItemInput): string {
   const title = valueOrFallback(item.title);
   const description = valueOrFallback(item.description);
@@ -281,9 +336,9 @@ export function buildItemYamlRecord(
       expected_behavior: fallback,
       actual_behavior: fallback,
       impact: fallback,
-      constraints: "Keep the response specific, implementation-ready, and scoped to this item.",
-      requested_output:
-        "Return root cause hypotheses, fixes with tradeoffs, and an ordered implementation plan."
+      constraints:
+        "Keep the response specific, implementation-ready, and scoped to this item. If requirements are ambiguous, conflicting, or incomplete, ask targeted clarifying questions before final recommendations.",
+      requested_output: promptRequestedOutput(templateKind)
     },
     timestamps: {
       created_at: item.createdAt,
