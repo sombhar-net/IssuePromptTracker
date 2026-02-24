@@ -31,6 +31,23 @@ export interface Project {
   updatedAt: string;
 }
 
+export interface ProjectAgentKey {
+  keyId: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface ProjectAgentKeyCreateResponse {
+  keyId: string;
+  name: string;
+  prefix: string;
+  token: string;
+  createdAt: string;
+}
+
 export interface Category {
   id: string;
   name: string;

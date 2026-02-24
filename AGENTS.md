@@ -95,6 +95,49 @@ When making changes, append an entry to **Change Log** below with:
 - Verification performed:
   - `npm run build -w apps/web`
   - `npm run test`
+- 2026-02-24
+- Updated root development startup behavior to fail fast when one service crashes:
+  - changed root `npm run dev` to use `concurrently --kill-others-on-fail`
+  - prevents `apps/web` from staying up alone and surfacing repeated Vite proxy `ECONNREFUSED` errors when `apps/api` fails to boot
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run dev`
+- Added automatic system color-scheme adaptation for web UI:
+  - introduced light/dark design tokens in `apps/web/src/styles.css` with `@media (prefers-color-scheme: dark)`
+  - updated core surfaces/controls/overlays to use shared color variables so cards, forms, nav, modals, and dropzones switch theme automatically
+  - added dark-mode-specific overrides for landing gradients, auth shells, alerts, and focus/active states
+- Updated browser theme color metadata in `apps/web/index.html` with light/dark `theme-color` meta tags.
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- Added agent-integration backend surface for skill-driven automations:
+  - project-scoped API key management endpoints:
+    - `POST /api/projects/:projectId/agent-keys`
+    - `GET /api/projects/:projectId/agent-keys`
+    - `DELETE /api/projects/:projectId/agent-keys/:keyId` (revoke)
+  - new API-key-authenticated namespace:
+    - `GET /api/agent/v1/project`
+    - `GET /api/agent/v1/issues`
+    - `GET /api/agent/v1/issues/:id`
+    - `GET /api/agent/v1/issues/:id/prompt`
+    - `POST /api/agent/v1/issues/:id/resolve`
+    - `GET /api/agent/v1/issues/:issueId/images/:imageId`
+  - agent issue list/detail supports optional prompt embedding and optional inline image payloads.
+- Added Prisma models/enums for machine-key auth and resolution activity audit trail:
+  - `AgentApiKey`
+  - `ItemActivity`
+  - `ItemActivityActorType`, `ItemActivityType`
+- Added migration `20260224010000_add_agent_api_keys_and_item_activities`.
+- Added env/config support for inline image size limit:
+  - `AGENT_INLINE_IMAGE_MAX_BYTES` (default `262144`)
+  - documented in `.env.example` and `README.md`.
+- Migration/env impact:
+  - new DB migration required before using agent APIs
+  - new optional env var `AGENT_INLINE_IMAGE_MAX_BYTES`
+- Verification performed:
+  - `npm run prisma:generate -w apps/api`
+  - `npm run build`
+  - `npm run test`
 - Updated `/prompts` copy behavior to match issue prompt tab:
   - `Copy Prompt` now attempts rich clipboard copy with prompt text + saved images
   - falls back to prompt text copy/manual fallback when image clipboard is unsupported or blocked
@@ -222,3 +265,35 @@ When making changes, append an entry to **Change Log** below with:
 - Migration/env impact: none.
 - Verification performed:
   - `npm run build -w apps/web`
+- Updated sidebar brand kicker copy to `Issue & Feature Tracker` for clearer product meaning.
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- Replaced remaining legacy tracker labels across web metadata/PWA config:
+  - updated `apple-mobile-web-app-title` in `apps/web/index.html`
+  - updated PWA `short_name` in `apps/web/vite.config.ts`
+- Migration/env impact: none.
+- Verification performed:
+  - searched for legacy tracker label text (no matches)
+  - `npm run build -w apps/web`
+- Hardened agent API key creation:
+  - key prefix is now generated independently from the secret value
+  - creation retries on rare DB unique-key collisions to avoid transient 500s
+- Removed unused server code from agent API implementation (`FastifyReply` import and dead image serialization helper).
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build`
+  - `npm run test`
+- Added web UI for managing project-scoped agent API keys:
+  - project list now includes `Keys` action per project
+  - new page route `/projects/:projectId/keys` to create/list/revoke keys
+  - one-time token reveal panel after create with clipboard copy action
+  - key list shows status (`Active`/`Revoked`), prefix, created time, and last-used time
+- Added frontend API/types for key management endpoints:
+  - `createProjectAgentKey()`
+  - `getProjectAgentKeys()`
+  - `revokeProjectAgentKey()`
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+  - `npm run test`

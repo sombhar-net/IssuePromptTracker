@@ -37,6 +37,16 @@ enum CategoryKind {
   other
 }
 
+enum ItemActivityActorType {
+  USER
+  AGENT
+}
+
+enum ItemActivityType {
+  RESOLUTION_NOTE
+  STATUS_CHANGE
+}
+
 model Project {
   id          String   @id @default(cuid())
   ownerId     String?
@@ -48,6 +58,7 @@ model Project {
   owner           User?            @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   items           Item[]
   promptTemplates PromptTemplate[]
+  agentApiKeys    AgentApiKey[]
 
   @@index([ownerId])
 }
@@ -80,6 +91,7 @@ model Item {
   project  Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   images   ItemImage[]
+  activities ItemActivity[]
 
   @@index([ownerId])
   @@index([projectId])
@@ -112,8 +124,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  projects Project[]
-  items    Item[]
+  projects          Project[]
+  items             Item[]
+  itemActivities    ItemActivity[]
+  createdAgentKeys  AgentApiKey[]
 }
 
 model PromptTemplate {
@@ -128,4 +142,44 @@ model PromptTemplate {
 
   @@unique([projectId, kind])
   @@index([projectId])
+}
+
+model AgentApiKey {
+  id              String    @id @default(cuid())
+  projectId       String
+  createdByUserId String
+  name            String
+  prefix          String    @unique
+  secretHash      String
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy  User           @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  activities ItemActivity[]
+
+  @@index([projectId])
+  @@index([revokedAt])
+}
+
+model ItemActivity {
+  id          String                @id @default(cuid())
+  itemId       String
+  actorType    ItemActivityActorType
+  actorUserId  String?
+  agentKeyId   String?
+  type         ItemActivityType
+  message      String
+  metadata     Json?
+  createdAt    DateTime             @default(now())
+
+  item      Item        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  actorUser User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  agentKey  AgentApiKey? @relation(fields: [agentKeyId], references: [id], onDelete: SetNull)
+
+  @@index([itemId, createdAt])
+  @@index([actorUserId])
+  @@index([agentKeyId])
 }

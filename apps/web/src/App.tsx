@@ -25,6 +25,7 @@ import {
   createItem,
   createItemPrompt,
   createProject,
+  createProjectAgentKey,
   deleteCategory,
   deleteItem,
   deleteItemImage,
@@ -35,9 +36,11 @@ import {
   getCategories,
   getItems,
   getMe,
+  getProjectAgentKeys,
   getPromptTemplates,
   getProjects,
   login as loginUser,
+  revokeProjectAgentKey,
   register as registerUser,
   updateCategory,
   updateItem,
@@ -60,6 +63,7 @@ import type {
   PromptTemplateKind,
   PromptTemplatePlaceholder,
   PromptTemplateSet,
+  ProjectAgentKey,
   Project
 } from "./types";
 
@@ -156,6 +160,19 @@ function formatFileSize(bytes: number): string {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return "Never";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString();
 }
 
 function escapeHtml(value: string): string {
@@ -276,7 +293,8 @@ type AppIconName =
   | "download"
   | "folder"
   | "refresh"
-  | "reset";
+  | "reset"
+  | "key";
 
 function AppIcon(props: { name: AppIconName; className?: string }): JSX.Element {
   const { name, className = "btn-icon" } = props;
@@ -422,6 +440,15 @@ function AppIcon(props: { name: AppIconName; className?: string }): JSX.Element 
           <path d="M4 12H8" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
           <path d="M16 12H20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
           <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="2" />
+        </svg>
+      );
+    case "key":
+      return (
+        <svg {...sharedProps}>
+          <circle cx="7.5" cy="12" r="3.5" stroke="currentColor" strokeWidth="2" />
+          <path d="M11 12H20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M16 12V15" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          <path d="M18.5 12V14" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
         </svg>
       );
     default:
@@ -681,6 +708,10 @@ function ProjectsListPage(props: ProjectsListPageProps): JSX.Element {
                 <span>{project.name}</span>
               </label>
               <div className="inline-actions">
+                <button className="button-with-icon" onClick={() => navigate(`/projects/${project.id}/keys`)} type="button">
+                  <AppIcon name="key" />
+                  Keys
+                </button>
                 <button className="button-with-icon" onClick={() => navigate(`/projects/${project.id}/edit`)} type="button">
                   <AppIcon name="edit" />
                   Edit
@@ -836,6 +867,259 @@ function ProjectFormPage(props: ProjectFormPageProps): JSX.Element {
             </button>
           </div>
         </form>
+      </article>
+    </section>
+  );
+}
+
+interface ProjectAgentKeysPageProps {
+  projects: Project[];
+  reportError: ReportError;
+  reportNotice: ReportNotice;
+}
+
+function ProjectAgentKeysPage(props: ProjectAgentKeysPageProps): JSX.Element {
+  const { projects, reportError, reportNotice } = props;
+  const navigate = useNavigate();
+  const { projectId } = useParams<{ projectId: string }>();
+  const project = useMemo(
+    () => projects.find((entry) => entry.id === projectId) ?? null,
+    [projectId, projects]
+  );
+
+  const [keys, setKeys] = useState<ProjectAgentKey[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [keyName, setKeyName] = useState("");
+  const [createdToken, setCreatedToken] = useState("");
+  const [tokenCopied, setTokenCopied] = useState(false);
+
+  async function loadKeys(): Promise<void> {
+    if (!projectId) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await getProjectAgentKeys(projectId);
+      setKeys(response);
+    } catch (error) {
+      reportError(error, "Failed to load API keys");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    setCreatedToken("");
+    setTokenCopied(false);
+    if (!projectId) {
+      return;
+    }
+    void loadKeys();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  async function submitCreateKey(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+
+    if (!projectId) {
+      return;
+    }
+
+    if (!keyName.trim()) {
+      reportError(undefined, "API key name is required");
+      return;
+    }
+
+    try {
+      setBusy(true);
+      const created = await createProjectAgentKey(projectId, {
+        name: keyName.trim()
+      });
+      setKeyName("");
+      setCreatedToken(created.token);
+      setTokenCopied(false);
+      await loadKeys();
+      reportNotice("API key created. Copy the token now; it won't be shown again.");
+    } catch (error) {
+      reportError(error, "Failed to create API key");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyTokenToClipboard(): Promise<void> {
+    if (!createdToken) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(createdToken);
+      setTokenCopied(true);
+      reportNotice("API key token copied");
+    } catch (error) {
+      reportError(error, "Failed to copy API key token");
+    }
+  }
+
+  async function revokeKey(key: ProjectAgentKey): Promise<void> {
+    if (!projectId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Revoke API key "${key.name}"? Agents using this key lose access immediately.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setBusy(true);
+      await revokeProjectAgentKey(projectId, key.keyId);
+      await loadKeys();
+      reportNotice("API key revoked");
+    } catch (error) {
+      reportError(error, "Failed to revoke API key");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!projectId || !project) {
+    return (
+      <section className="page-section">
+        <header className="section-head">
+          <div>
+            <p className="kicker">Projects</p>
+            <h2>Project Not Found</h2>
+          </div>
+          <button className="button-with-icon" onClick={() => navigate("/projects")} type="button">
+            <AppIcon name="back" />
+            Back to Projects
+          </button>
+        </header>
+        <article className="panel-card">
+          <p className="helper">The requested project could not be found in your current workspace.</p>
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="page-section">
+      <header className="section-head">
+        <div>
+          <p className="kicker">Projects</p>
+          <h2>Manage API Keys</h2>
+          <p className="helper">{project.name}</p>
+        </div>
+        <button className="button-with-icon" onClick={() => navigate("/projects")} type="button">
+          <AppIcon name="back" />
+          Back to Projects
+        </button>
+      </header>
+
+      <article className="panel-card">
+        <h3>Create Agent Key</h3>
+        <p className="helper">
+          Use this key with `X-AAM-API-Key` for `/api/agent/v1/*` requests.
+        </p>
+
+        <form className="stacked-form" onSubmit={submitCreateKey}>
+          <label>
+            Key name
+            <input
+              maxLength={120}
+              placeholder="Example: Mobile QA Agent"
+              value={keyName}
+              onChange={(event) => setKeyName(event.target.value)}
+            />
+          </label>
+          <div className="inline-actions">
+            <button className="primary button-with-icon" disabled={busy} type="submit">
+              <AppIcon name="plus" />
+              Create Key
+            </button>
+            <button
+              className="button-with-icon"
+              disabled={busy || loading}
+              onClick={() => void loadKeys()}
+              type="button"
+            >
+              <AppIcon name="refresh" />
+              Refresh
+            </button>
+          </div>
+        </form>
+
+        {createdToken && (
+          <div className="agent-token-panel">
+            <p className="helper">
+              Copy this token now. For security reasons, it is not shown again after you leave this page.
+            </p>
+            <textarea readOnly rows={3} value={createdToken} />
+            <div className="inline-actions">
+              <button className="primary button-with-icon" onClick={() => void copyTokenToClipboard()} type="button">
+                <AppIcon name="copy" />
+                Copy Token
+              </button>
+              <button
+                className="button-with-icon"
+                onClick={() => {
+                  setCreatedToken("");
+                  setTokenCopied(false);
+                }}
+                type="button"
+              >
+                <AppIcon name="cancel" />
+                Hide Token
+              </button>
+            </div>
+            {tokenCopied && <p className="helper">Token copied to clipboard.</p>}
+          </div>
+        )}
+      </article>
+
+      <article className="panel-card">
+        <h3>Existing Keys</h3>
+        {loading && <p className="helper">Loading API keys...</p>}
+        {!loading && keys.length === 0 && <p className="helper">No API keys created yet.</p>}
+
+        <div className="row-stack">
+          {keys.map((key) => (
+            <div className="row-card key-row" key={key.keyId}>
+              <div className="key-row-main">
+                <div className="row-title key-row-title">
+                  <strong>{key.name}</strong>
+                  <span className={key.revokedAt ? "tag-chip tag-chip-revoked" : "tag-chip"}>
+                    {key.revokedAt ? "Revoked" : "Active"}
+                  </span>
+                </div>
+                <p className="key-row-meta">
+                  Prefix: <code>{key.prefix}</code>
+                </p>
+                <p className="key-row-meta">
+                  Created: {formatDateTime(key.createdAt)} · Last used: {formatDateTime(key.lastUsedAt)}
+                </p>
+              </div>
+              <div className="inline-actions">
+                {!key.revokedAt && (
+                  <button
+                    className="danger button-with-icon"
+                    disabled={busy}
+                    onClick={() => void revokeKey(key)}
+                    type="button"
+                  >
+                    <AppIcon name="trash" />
+                    Revoke
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </article>
     </section>
   );
@@ -3183,7 +3467,7 @@ function AppShell(props: ShellProps): JSX.Element {
             <div className="logo-lockup">
               <BrandMark />
               <div className="brand-copy">
-                <p className="kicker">AAM Tracker</p>
+                <p className="kicker">Issue & Feature Tracker</p>
                 <h1>Issue Prompt Lab</h1>
               </div>
             </div>
@@ -3287,6 +3571,16 @@ function AppShell(props: ShellProps): JSX.Element {
                 <ProjectFormPage
                   projects={projects}
                   refreshWorkspace={refreshWorkspace}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
+            <Route
+              path="/projects/:projectId/keys"
+              element={
+                <ProjectAgentKeysPage
+                  projects={projects}
                   reportError={reportError}
                   reportNotice={reportNotice}
                 />

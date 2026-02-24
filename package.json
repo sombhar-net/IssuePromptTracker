@@ -9,7 +9,7 @@
   "scripts": {
     "setup:dev": "./scripts/dev-setup.sh",
     "stop:devdb": "./scripts/dev-stop.sh",
-    "dev": "npm run build -w packages/shared && npm run prisma:generate -w apps/api && concurrently -n api,web -c blue,green \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "dev": "npm run build -w packages/shared && npm run prisma:generate -w apps/api && concurrently --kill-others-on-fail -n api,web -c blue,green \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
     "build": "npm run build -w packages/shared && npm run build -w apps/api && npm run build -w apps/web",
     "test": "npm run test --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate -w apps/api",

@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         id: "/",
         name: "Issue Prompt Tracker",
-        short_name: "AAM Tracker",
+        short_name: "Issue Tracker",
         description: "Capture issues/features with screenshots and export AI-ready YAML prompts.",
         start_url: "/",
         scope: "/",

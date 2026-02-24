@@ -8,6 +8,8 @@ import type {
   ItemFilters,
   ItemPayload,
   ItemStatus,
+  ProjectAgentKey,
+  ProjectAgentKeyCreateResponse,
   PromptTemplateSet,
   PromptTemplatesResponse,
   Project,
@@ -223,6 +225,26 @@ export async function updateProject(
 
 export async function deleteProject(id: string): Promise<void> {
   return request<void>(`/projects/${id}`, {
+    method: "DELETE"
+  });
+}
+
+export async function createProjectAgentKey(
+  projectId: string,
+  payload: { name: string }
+): Promise<ProjectAgentKeyCreateResponse> {
+  return request<ProjectAgentKeyCreateResponse>(`/projects/${projectId}/agent-keys`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getProjectAgentKeys(projectId: string): Promise<ProjectAgentKey[]> {
+  return request<ProjectAgentKey[]>(`/projects/${projectId}/agent-keys`);
+}
+
+export async function revokeProjectAgentKey(projectId: string, keyId: string): Promise<void> {
+  return request<void>(`/projects/${projectId}/agent-keys/${keyId}`, {
     method: "DELETE"
   });
 }

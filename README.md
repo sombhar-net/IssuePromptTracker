@@ -101,6 +101,7 @@ Then open `http://localhost:3000`.
   - `DATABASE_URL=postgresql://app:<strong-password>@postgres:5432/aamtracker?schema=public`
   - `UPLOAD_DIR=/data/uploads` (must stay absolute for persistent volume mounts)
   - `MAX_UPLOAD_MB=8`
+  - `AGENT_INLINE_IMAGE_MAX_BYTES=262144`
   - `CORS_ORIGIN=*` (or your domain)
   - `JWT_SECRET=<long-random-secret>`
   - `JWT_EXPIRES_IN=7d`
@@ -127,6 +128,14 @@ Important:
 - `/api/prompts/item/:id`
 - `/api/prompts/project/:projectId`
 - `/api/prompt-templates/:projectId` (GET/PUT)
+- `/api/projects/:projectId/agent-keys` (POST/GET)
+- `/api/projects/:projectId/agent-keys/:keyId` (DELETE revoke)
+- `/api/agent/v1/project`
+- `/api/agent/v1/issues`
+- `/api/agent/v1/issues/:id`
+- `/api/agent/v1/issues/:id/prompt`
+- `/api/agent/v1/issues/:id/resolve`
+- `/api/agent/v1/issues/:issueId/images/:imageId`
 - `/api/exports/item/:id.zip`
 - `/api/exports/project/:projectId.zip`
 - `/uploads/*` static screenshots
@@ -135,3 +144,4 @@ Important:
 - Non-admin users only see their own projects/items
 - Admin users can see and manage all projects/items across users
 - Prompt templates are editable per project for `issue` / `feature` / `other` with default fallback
+- Agent API keys are project-scoped machine credentials for `/api/agent/v1` and use header `X-AAM-API-Key`.
