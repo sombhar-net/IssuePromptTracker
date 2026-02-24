@@ -43,6 +43,11 @@ enum ItemActivityActorType {
 }
 
 enum ItemActivityType {
+  ITEM_CREATED
+  ITEM_UPDATED
+  IMAGE_UPLOADED
+  IMAGE_DELETED
+  IMAGES_REORDERED
   RESOLUTION_NOTE
   STATUS_CHANGE
 }

@@ -301,3 +301,59 @@ When making changes, append an entry to **Change Log** below with:
 - Verification performed:
   - `npm run dev`
   - `DATABASE_URL=postgresql://app:app@127.0.0.1:59999/aamtracker?schema=public DEV_API_WAIT_SECONDS=5 npm run dev`
+- 2026-02-24
+- Refined `/projects` list row actions for cleaner compact layout:
+  - moved project row action controls to compact icon-only buttons (`Keys`, `Edit`, `Delete` via tooltip/aria labels)
+  - kept project actions aligned to the right side of each row instead of stacking under the project name
+  - added project-specific responsive overrides so action controls remain right-aligned on small screens
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- 2026-02-24
+- Refined sidebar user identity card styling for clearer hierarchy and improved visual polish:
+  - added avatar-style initial badge and grouped identity details
+  - reorganized role/logout actions for better alignment and tap targets
+  - improved card surface treatment and responsive behavior across desktop/mobile breakpoints
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- 2026-02-24
+- Replaced persistent global status banners with timed toast notifications:
+  - removed inline `alert` banner rendering from auth and authenticated shell layouts
+  - added root-level toast pipeline for `reportError`/`reportNotice` messages with auto-dismiss after 5 seconds
+  - added responsive toast placement: top-right on desktop, bottom on mobile
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- 2026-02-24
+- Tightened mobile issue-card header action spacing on `/issues`:
+  - updated mobile (`max-width: 880px`) `.item-top-actions` layout to avoid full-width `space-between` distribution
+  - actions now stay compact/grouped so edit/delete buttons are not pushed far apart
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+- 2026-02-24
+- Expanded activity/audit surface across API, agent API, and web UI:
+  - added project activity feed endpoint for JWT users: `GET /api/activities?projectId=...`
+  - added item activity timeline endpoint for JWT users: `GET /api/items/:id/activities`
+  - added agent polling activity feed endpoint: `GET /api/agent/v1/activities`
+  - added agent per-issue timeline endpoint: `GET /api/agent/v1/issues/:id/activities`
+  - added new web route `/activity` with filters/pagination and item jump-to-edit actions
+  - added issue manage-form `Activity` tab on `/issues/:itemId/edit` with per-item timeline filtering/pagination
+  - item mutation handlers now persist richer `ItemActivity` events for create/update/status/image upload/delete/reorder and agent resolve flows
+- Added comprehensive markdown docs for agentic coding:
+  - `apps/api/docs/agentic-coding.md`
+  - `apps/api/docs/agent-api-reference.md`
+  - `apps/api/docs/agent-polling-playbook.md`
+  - new public docs endpoint: `GET /api/agent/v1/docs.md` (returns combined markdown with examples)
+- Updated README agent integration docs/endpoint references and added new activity endpoints to API list.
+- Migration/env impact:
+  - new DB migration required: `20260224162000_expand_item_activity_types`
+  - no new environment variables
+- Verification performed:
+  - `npm run build -w packages/shared`
+  - `npm run prisma:generate -w apps/api`
+  - `npm run build -w apps/api`
+  - `npm run build -w apps/web`
+  - `npm run test`
+  - `npm run build`

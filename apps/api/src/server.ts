@@ -3,6 +3,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { promises as fs } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { pipeline } from "node:stream/promises";
+import { fileURLToPath } from "node:url";
 import type { FastifyRequest } from "fastify";
 import archiver from "archiver";
 import bcrypt from "bcryptjs";
@@ -78,7 +79,29 @@ const agentApiTokenPrefix = "aam_pk";
 const agentApiKeyCreateMaxAttempts = 5;
 const agentIssueListLimitDefault = 20;
 const agentIssueListLimitMax = 100;
+const activityListLimitDefault = 50;
+const activityListLimitMax = 200;
 const agentResolveStatusSchema = z.enum(["resolved", "archived"]);
+const itemActivityTypeSchema = z.enum([
+  "ITEM_CREATED",
+  "ITEM_UPDATED",
+  "IMAGE_UPLOADED",
+  "IMAGE_DELETED",
+  "IMAGES_REORDERED",
+  "RESOLUTION_NOTE",
+  "STATUS_CHANGE"
+]);
+const activityQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(activityListLimitMax)
+    .optional()
+    .default(activityListLimitDefault),
+  cursor: z.string().min(1).optional(),
+  type: itemActivityTypeSchema.optional()
+});
 const queryBooleanSchema = z.preprocess((value) => {
   if (value === undefined) {
     return undefined;
@@ -105,7 +128,15 @@ const authTokenPayloadSchema = z.object({
   role: userRoleSchema
 });
 
-const publicPaths = new Set(["/healthz", "/api/auth/login", "/api/auth/register"]);
+const apiModuleDir = path.dirname(fileURLToPath(import.meta.url));
+const agentDocsDir = path.resolve(apiModuleDir, "../docs");
+const agentDocsFileNames = [
+  "agentic-coding.md",
+  "agent-api-reference.md",
+  "agent-polling-playbook.md"
+] as const;
+
+const publicPaths = new Set(["/healthz", "/api/auth/login", "/api/auth/register", "/api/agent/v1/docs.md"]);
 
 function isAdmin(user: AuthUser): boolean {
   return user.role === "ADMIN";
@@ -299,6 +330,18 @@ function getAgentAuth(request: FastifyRequest): AgentAuth {
   return request.agentAuth;
 }
 
+type ItemActivityActorInput =
+  | { actorType: "USER"; actorUserId: string; agentKeyId?: never }
+  | { actorType: "AGENT"; agentKeyId: string; actorUserId?: never };
+
+interface RecordItemActivityInput {
+  itemId: string;
+  type: z.infer<typeof itemActivityTypeSchema>;
+  message: string;
+  metadata?: Prisma.InputJsonValue;
+  actor: ItemActivityActorInput;
+}
+
 function projectAccessWhere(user: AuthUser): Prisma.ProjectWhereInput {
   if (isAdmin(user)) {
     return {};
@@ -311,6 +354,13 @@ function itemAccessWhere(user: AuthUser): Prisma.ItemWhereInput {
     return {};
   }
   return { project: { ownerId: user.id } };
+}
+
+function itemActivityAccessWhere(user: AuthUser): Prisma.ItemActivityWhereInput {
+  if (isAdmin(user)) {
+    return {};
+  }
+  return { item: { project: { ownerId: user.id } } };
 }
 
 function buildPromptTemplateSet(
@@ -403,6 +453,35 @@ type ItemWithRelations = Prisma.ItemGetPayload<{
   include: typeof itemWithRelationsInclude;
 }>;
 
+const itemActivityWithRelationsInclude = {
+  actorUser: {
+    select: {
+      id: true,
+      email: true,
+      displayName: true
+    }
+  },
+  agentKey: {
+    select: {
+      id: true,
+      name: true,
+      prefix: true
+    }
+  },
+  item: {
+    select: {
+      id: true,
+      title: true,
+      type: true,
+      projectId: true
+    }
+  }
+} satisfies Prisma.ItemActivityInclude;
+
+type ItemActivityWithRelations = Prisma.ItemActivityGetPayload<{
+  include: typeof itemActivityWithRelationsInclude;
+}>;
+
 function toAgentIssueImageUrl(issueId: string, imageId: string): string {
   return `/api/agent/v1/issues/${issueId}/images/${imageId}`;
 }
@@ -439,6 +518,48 @@ function decodeAgentIssuesCursor(cursor: string): { updatedAt: Date; id: string 
   } catch {
     return null;
   }
+}
+
+function encodeActivityCursor(activity: { createdAt: Date; id: string }): string {
+  return Buffer.from(
+    JSON.stringify({
+      createdAt: activity.createdAt.toISOString(),
+      id: activity.id
+    }),
+    "utf8"
+  ).toString("base64url");
+}
+
+function decodeActivityCursor(cursor: string): { createdAt: Date; id: string } | null {
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+      createdAt?: string;
+      id?: string;
+    };
+    if (!decoded.createdAt || !decoded.id) {
+      return null;
+    }
+
+    const parsedDate = new Date(decoded.createdAt);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return null;
+    }
+
+    return {
+      createdAt: parsedDate,
+      id: decoded.id
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseIsoDate(value: string): Date | null {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
 }
 
 function generateAgentKeySecret(): string {
@@ -581,6 +702,206 @@ async function buildAgentIssuePayload(
   };
 }
 
+function userActivityActor(user: AuthUser): ItemActivityActorInput {
+  return {
+    actorType: "USER",
+    actorUserId: user.id
+  };
+}
+
+function agentActivityActor(agentAuth: AgentAuth): ItemActivityActorInput {
+  return {
+    actorType: "AGENT",
+    agentKeyId: agentAuth.keyId
+  };
+}
+
+async function recordItemActivity(
+  tx: Prisma.TransactionClient,
+  input: RecordItemActivityInput
+): Promise<void> {
+  await tx.itemActivity.create({
+    data: {
+      itemId: input.itemId,
+      actorType: input.actor.actorType,
+      actorUserId: input.actor.actorType === "USER" ? input.actor.actorUserId : null,
+      agentKeyId: input.actor.actorType === "AGENT" ? input.actor.agentKeyId : null,
+      type: input.type,
+      message: input.message,
+      metadata: input.metadata
+    }
+  });
+}
+
+function serializeItemActivity(activity: ItemActivityWithRelations) {
+  const actor =
+    activity.actorType === "USER"
+      ? {
+          kind: "user" as const,
+          userId: activity.actorUser?.id || null,
+          email: activity.actorUser?.email || null,
+          displayName: activity.actorUser?.displayName || null
+        }
+      : {
+          kind: "agent" as const,
+          keyId: activity.agentKey?.id || null,
+          name: activity.agentKey?.name || null,
+          prefix: activity.agentKey?.prefix || null
+        };
+
+  return {
+    id: activity.id,
+    itemId: activity.itemId,
+    type: activity.type,
+    actorType: activity.actorType,
+    message: activity.message,
+    metadata: activity.metadata,
+    createdAt: activity.createdAt.toISOString(),
+    actor,
+    item: {
+      id: activity.item.id,
+      title: activity.item.title,
+      type: activity.item.type,
+      projectId: activity.item.projectId
+    }
+  };
+}
+
+function buildActivityWhere(input: {
+  projectId?: string;
+  itemId?: string;
+  type?: z.infer<typeof itemActivityTypeSchema>;
+  since?: Date;
+  cursor?: { createdAt: Date; id: string } | null;
+  accessWhere?: Prisma.ItemActivityWhereInput;
+}): Prisma.ItemActivityWhereInput {
+  const whereClauses: Prisma.ItemActivityWhereInput[] = [];
+
+  if (input.accessWhere && Object.keys(input.accessWhere).length > 0) {
+    whereClauses.push(input.accessWhere);
+  }
+
+  if (input.projectId) {
+    whereClauses.push({
+      item: {
+        projectId: input.projectId
+      }
+    });
+  }
+
+  if (input.itemId) {
+    whereClauses.push({
+      itemId: input.itemId
+    });
+  }
+
+  if (input.type) {
+    whereClauses.push({
+      type: input.type
+    });
+  }
+
+  if (input.since) {
+    whereClauses.push({
+      createdAt: { gte: input.since }
+    });
+  }
+
+  if (input.cursor) {
+    whereClauses.push({
+      OR: [
+        { createdAt: { lt: input.cursor.createdAt } },
+        {
+          createdAt: input.cursor.createdAt,
+          id: { lt: input.cursor.id }
+        }
+      ]
+    });
+  }
+
+  if (whereClauses.length === 0) {
+    return {};
+  }
+
+  if (whereClauses.length === 1) {
+    return whereClauses[0];
+  }
+
+  return { AND: whereClauses };
+}
+
+interface ItemUpdateSnapshot {
+  projectId: string;
+  categoryId: string | null;
+  type: "issue" | "feature";
+  title: string;
+  description: string;
+  status: "open" | "in_progress" | "resolved" | "archived";
+  priority: "low" | "medium" | "high" | "critical";
+  tags: string[];
+}
+
+function toMetadataJsonValue(value: string | string[] | null): Prisma.JsonValue | null {
+  return value;
+}
+
+function summarizeItemFieldChanges(
+  previous: ItemUpdateSnapshot,
+  next: ItemUpdateSnapshot
+): Array<{
+  field: keyof ItemUpdateSnapshot;
+  from: Prisma.JsonValue | null;
+  to: Prisma.JsonValue | null;
+}> {
+  const changes: Array<{
+    field: keyof ItemUpdateSnapshot;
+    from: Prisma.JsonValue | null;
+    to: Prisma.JsonValue | null;
+  }> = [];
+
+  const scalarFields: Array<keyof ItemUpdateSnapshot> = [
+    "projectId",
+    "categoryId",
+    "type",
+    "title",
+    "description",
+    "status",
+    "priority"
+  ];
+
+  for (const field of scalarFields) {
+    if (previous[field] !== next[field]) {
+      changes.push({
+        field,
+        from: toMetadataJsonValue(previous[field]),
+        to: toMetadataJsonValue(next[field])
+      });
+    }
+  }
+
+  if (JSON.stringify(previous.tags) !== JSON.stringify(next.tags)) {
+    changes.push({
+      field: "tags",
+      from: toMetadataJsonValue(previous.tags),
+      to: toMetadataJsonValue(next.tags)
+    });
+  }
+
+  return changes;
+}
+
+async function loadAgentDocsMarkdown(): Promise<string> {
+  const sections = await Promise.all(
+    agentDocsFileNames.map(async (fileName) => {
+      const filePath = path.join(agentDocsDir, fileName);
+      const content = await fs.readFile(filePath, "utf8");
+      return content.trim();
+    })
+  );
+
+  return sections.filter(Boolean).join("\n\n---\n\n");
+}
+
 async function ensureUploadDir(): Promise<void> {
   await fs.mkdir(env.uploadDir, { recursive: true });
 }
@@ -688,6 +1009,17 @@ app.setErrorHandler((error, request, reply) => {
 });
 
 app.get("/healthz", async () => ({ ok: true }));
+
+app.get("/api/agent/v1/docs.md", async (request, reply) => {
+  try {
+    const markdown = await loadAgentDocsMarkdown();
+    reply.header("Content-Type", "text/markdown; charset=utf-8");
+    return reply.send(markdown);
+  } catch (error) {
+    request.log.error(error, "Failed to load agent API docs markdown");
+    return reply.status(500).send({ message: "Failed to load agent API docs markdown" });
+  }
+});
 
 await ensureUploadDir();
 
@@ -1211,26 +1543,52 @@ app.post("/api/items", async (request, reply) => {
     });
   }
 
-  const item = await prisma.item.create({
-    data: {
-      ownerId: project.ownerId ?? authUser.id,
-      projectId: body.projectId,
-      categoryId: body.categoryId,
-      type: body.type,
-      title: body.title.trim(),
-      description: body.description.trim(),
-      status: body.status,
-      priority: body.priority,
-      tags: body.tags.map((tag) => tag.trim()).filter(Boolean)
-    },
-    include: {
-      project: true,
-      category: true,
-      images: true
-    }
+  const actor = userActivityActor(authUser);
+  const trimmedTags = body.tags.map((tag) => tag.trim()).filter(Boolean);
+  const item = await prisma.$transaction(async (tx) => {
+    const created = await tx.item.create({
+      data: {
+        ownerId: project.ownerId ?? authUser.id,
+        projectId: body.projectId,
+        categoryId: body.categoryId,
+        type: body.type,
+        title: body.title.trim(),
+        description: body.description.trim(),
+        status: body.status,
+        priority: body.priority,
+        tags: trimmedTags
+      },
+      include: {
+        project: true,
+        category: true,
+        images: {
+          orderBy: { sortOrder: "asc" }
+        }
+      }
+    });
+
+    await recordItemActivity(tx, {
+      itemId: created.id,
+      actor,
+      type: "ITEM_CREATED",
+      message: "Item created",
+      metadata: {
+        type: created.type,
+        status: created.status,
+        priority: created.priority
+      }
+    });
+
+    return created;
   });
 
-  return reply.status(201).send(item);
+  return reply.status(201).send({
+    ...item,
+    images: item.images.map((image) => ({
+      ...image,
+      url: imagePublicUrl(image.relativePath)
+    }))
+  });
 });
 
 app.get("/api/items/:id", async (request, reply) => {
@@ -1288,7 +1646,14 @@ app.patch("/api/items/:id", async (request, reply) => {
     select: {
       id: true,
       projectId: true,
-      ownerId: true
+      ownerId: true,
+      categoryId: true,
+      type: true,
+      title: true,
+      description: true,
+      status: true,
+      priority: true,
+      tags: true
     }
   });
 
@@ -1320,27 +1685,94 @@ app.patch("/api/items/:id", async (request, reply) => {
     }
   }
 
-  return prisma.item.update({
-    where: { id: params.id },
-    data: {
-      ownerId: nextOwnerId,
-      projectId: body.projectId,
-      categoryId: body.categoryId,
-      type: body.type,
-      title: body.title?.trim(),
-      description: body.description?.trim(),
-      status: body.status,
-      priority: body.priority,
-      tags: body.tags?.map((tag) => tag.trim()).filter(Boolean)
-    },
-    include: {
-      project: true,
-      category: true,
-      images: {
-        orderBy: { sortOrder: "asc" }
+  const actor = userActivityActor(authUser);
+  const nextTags = body.tags?.map((tag) => tag.trim()).filter(Boolean);
+
+  const item = await prisma.$transaction(async (tx) => {
+    const updated = await tx.item.update({
+      where: { id: params.id },
+      data: {
+        ownerId: nextOwnerId,
+        projectId: body.projectId,
+        categoryId: body.categoryId,
+        type: body.type,
+        title: body.title?.trim(),
+        description: body.description?.trim(),
+        status: body.status,
+        priority: body.priority,
+        tags: nextTags
+      },
+      include: {
+        project: true,
+        category: true,
+        images: {
+          orderBy: { sortOrder: "asc" }
+        }
+      }
+    });
+
+    const previousSnapshot: ItemUpdateSnapshot = {
+      projectId: existing.projectId,
+      categoryId: existing.categoryId,
+      type: existing.type,
+      title: existing.title,
+      description: existing.description,
+      status: existing.status,
+      priority: existing.priority,
+      tags: existing.tags
+    };
+    const nextSnapshot: ItemUpdateSnapshot = {
+      projectId: updated.projectId,
+      categoryId: updated.categoryId,
+      type: updated.type,
+      title: updated.title,
+      description: updated.description,
+      status: updated.status,
+      priority: updated.priority,
+      tags: updated.tags
+    };
+    const changes = summarizeItemFieldChanges(previousSnapshot, nextSnapshot);
+
+    if (changes.length > 0) {
+      const statusChange = changes.find((change) => change.field === "status");
+
+      if (statusChange) {
+        await recordItemActivity(tx, {
+          itemId: updated.id,
+          actor,
+          type: "STATUS_CHANGE",
+          message: `Status changed from ${statusChange.from} to ${statusChange.to}`,
+          metadata: {
+            from: statusChange.from,
+            to: statusChange.to
+          }
+        });
+      }
+
+      const nonStatusChanges = changes.filter((change) => change.field !== "status");
+      if (nonStatusChanges.length > 0) {
+        await recordItemActivity(tx, {
+          itemId: updated.id,
+          actor,
+          type: "ITEM_UPDATED",
+          message: `Updated fields: ${nonStatusChanges.map((change) => change.field).join(", ")}`,
+          metadata: {
+            fields: nonStatusChanges
+          }
+        });
       }
     }
+
+    return updated;
   });
+
+  return {
+    ...item,
+    images: item.images.map((image) => ({
+      ...image,
+      url: imagePublicUrl(image.relativePath)
+    }))
+  };
 });
 
 app.patch("/api/items/:id/status", async (request, reply) => {
@@ -1357,25 +1789,51 @@ app.patch("/api/items/:id/status", async (request, reply) => {
       id: params.id,
       ...itemAccessWhere(authUser)
     },
-    select: { id: true }
+    select: {
+      id: true,
+      status: true
+    }
   });
 
   if (!existing) {
     return reply.status(404).send({ message: "Item not found" });
   }
 
-  const item = await prisma.item.update({
-    where: { id: params.id },
-    data: {
-      status: body.status
-    },
-    include: {
-      project: true,
-      category: true,
-      images: {
-        orderBy: { sortOrder: "asc" }
+  const actor = userActivityActor(authUser);
+  const item = await prisma.$transaction(async (tx) => {
+    let updated: ItemWithRelations;
+
+    if (existing.status === body.status) {
+      const found = await tx.item.findUnique({
+        where: { id: existing.id },
+        include: itemWithRelationsInclude
+      });
+      if (!found) {
+        throw new Error("Item not found");
       }
+      updated = found;
+    } else {
+      updated = await tx.item.update({
+        where: { id: params.id },
+        data: {
+          status: body.status
+        },
+        include: itemWithRelationsInclude
+      });
+
+      await recordItemActivity(tx, {
+        itemId: updated.id,
+        actor,
+        type: "STATUS_CHANGE",
+        message: `Status changed from ${existing.status} to ${body.status}`,
+        metadata: {
+          from: existing.status,
+          to: body.status
+        }
+      });
     }
+
+    return updated;
   });
 
   return {
@@ -1384,6 +1842,113 @@ app.patch("/api/items/:id/status", async (request, reply) => {
       ...image,
       url: imagePublicUrl(image.relativePath)
     }))
+  };
+});
+
+app.get("/api/items/:id/activities", async (request, reply) => {
+  const authUser = getAuthUser(request);
+  const params = z.object({ id: z.string().min(1) }).parse(request.params);
+  const query = activityQuerySchema.parse(request.query);
+  const cursor = query.cursor ? decodeActivityCursor(query.cursor) : null;
+
+  if (query.cursor && !cursor) {
+    return reply.status(400).send({ message: "Invalid cursor" });
+  }
+
+  const item = await prisma.item.findFirst({
+    where: {
+      id: params.id,
+      ...itemAccessWhere(authUser)
+    },
+    select: { id: true }
+  });
+
+  if (!item) {
+    return reply.status(404).send({ message: "Item not found" });
+  }
+
+  const where = buildActivityWhere({
+    itemId: params.id,
+    type: query.type,
+    cursor,
+    accessWhere: itemActivityAccessWhere(authUser)
+  });
+
+  const rows = await prisma.itemActivity.findMany({
+    where,
+    include: itemActivityWithRelationsInclude,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: query.limit + 1
+  });
+
+  const hasNext = rows.length > query.limit;
+  const pageRows = hasNext ? rows.slice(0, query.limit) : rows;
+
+  return {
+    itemId: params.id,
+    activities: pageRows.map(serializeItemActivity),
+    page: {
+      limit: query.limit,
+      nextCursor:
+        hasNext && pageRows.length > 0 ? encodeActivityCursor(pageRows[pageRows.length - 1]) : null
+    }
+  };
+});
+
+app.get("/api/activities", async (request, reply) => {
+  const authUser = getAuthUser(request);
+  const query = z
+    .object({
+      projectId: z.string().min(1),
+      itemId: z.string().min(1).optional(),
+      since: z.string().min(1).optional()
+    })
+    .merge(activityQuerySchema)
+    .parse(request.query);
+
+  const cursor = query.cursor ? decodeActivityCursor(query.cursor) : null;
+  if (query.cursor && !cursor) {
+    return reply.status(400).send({ message: "Invalid cursor" });
+  }
+
+  const since = query.since ? parseIsoDate(query.since) : null;
+  if (query.since && !since) {
+    return reply.status(400).send({ message: "Invalid since date" });
+  }
+
+  try {
+    await ensureProjectAccess(query.projectId, authUser);
+  } catch {
+    return reply.status(404).send({ message: "Project not found" });
+  }
+
+  const where = buildActivityWhere({
+    projectId: query.projectId,
+    itemId: query.itemId,
+    type: query.type,
+    since: since || undefined,
+    cursor,
+    accessWhere: itemActivityAccessWhere(authUser)
+  });
+
+  const rows = await prisma.itemActivity.findMany({
+    where,
+    include: itemActivityWithRelationsInclude,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: query.limit + 1
+  });
+
+  const hasNext = rows.length > query.limit;
+  const pageRows = hasNext ? rows.slice(0, query.limit) : rows;
+
+  return {
+    projectId: query.projectId,
+    activities: pageRows.map(serializeItemActivity),
+    page: {
+      limit: query.limit,
+      nextCursor:
+        hasNext && pageRows.length > 0 ? encodeActivityCursor(pageRows[pageRows.length - 1]) : null
+    }
   };
 });
 
@@ -1419,6 +1984,7 @@ app.delete("/api/items/:id", async (request, reply) => {
 
 app.post("/api/items/:id/images", async (request, reply) => {
   const authUser = getAuthUser(request);
+  const actor = userActivityActor(authUser);
   const params = z.object({ id: z.string().min(1) }).parse(request.params);
 
   const item = await prisma.item.findFirst({
@@ -1505,11 +2071,27 @@ app.post("/api/items/:id/images", async (request, reply) => {
     return reply.status(400).send({ message: "No image files were uploaded" });
   }
 
+  await prisma.itemActivity.create({
+    data: {
+      itemId: item.id,
+      actorType: actor.actorType,
+      actorUserId: actor.actorUserId,
+      type: "IMAGE_UPLOADED",
+      message: `Uploaded ${uploadedImages.length} image(s)`,
+      metadata: {
+        count: uploadedImages.length,
+        imageIds: uploadedImages.map((image) => image.id),
+        filenames: uploadedImages.map((image) => image.filename)
+      }
+    }
+  });
+
   return reply.status(201).send(uploadedImages);
 });
 
 app.delete("/api/items/:id/images/:imageId", async (request, reply) => {
   const authUser = getAuthUser(request);
+  const actor = userActivityActor(authUser);
   const params = z
     .object({
       id: z.string().min(1),
@@ -1529,7 +2111,19 @@ app.delete("/api/items/:id/images/:imageId", async (request, reply) => {
     return reply.status(404).send({ message: "Image not found" });
   }
 
-  await prisma.itemImage.delete({ where: { id: image.id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.itemImage.delete({ where: { id: image.id } });
+    await recordItemActivity(tx, {
+      itemId: image.itemId,
+      actor,
+      type: "IMAGE_DELETED",
+      message: `Removed image ${image.filename}`,
+      metadata: {
+        imageId: image.id,
+        filename: image.filename
+      }
+    });
+  });
   await fs.rm(path.join(env.uploadDir, image.relativePath), { force: true });
 
   return reply.status(204).send();
@@ -1537,6 +2131,7 @@ app.delete("/api/items/:id/images/:imageId", async (request, reply) => {
 
 app.patch("/api/items/:id/images/reorder", async (request, reply) => {
   const authUser = getAuthUser(request);
+  const actor = userActivityActor(authUser);
   const params = z.object({ id: z.string().min(1) }).parse(request.params);
   const body = z
     .object({
@@ -1576,14 +2171,26 @@ app.patch("/api/items/:id/images/reorder", async (request, reply) => {
     }
   }
 
-  await prisma.$transaction(
-    body.imageIds.map((imageId, index) =>
-      prisma.itemImage.update({
-        where: { id: imageId },
-        data: { sortOrder: index }
-      })
-    )
-  );
+  await prisma.$transaction(async (tx) => {
+    await Promise.all(
+      body.imageIds.map((imageId, index) =>
+        tx.itemImage.update({
+          where: { id: imageId },
+          data: { sortOrder: index }
+        })
+      )
+    );
+
+    await recordItemActivity(tx, {
+      itemId: item.id,
+      actor,
+      type: "IMAGES_REORDERED",
+      message: "Reordered item screenshots",
+      metadata: {
+        imageIds: body.imageIds
+      }
+    });
+  });
 
   return reply.status(204).send();
 });
@@ -1941,6 +2548,55 @@ app.get("/api/exports/project/:projectId.zip", async (request, reply) => {
   return reply.send(archive);
 });
 
+app.get("/api/agent/v1/activities", async (request, reply) => {
+  const agentAuth = getAgentAuth(request);
+  const query = z
+    .object({
+      itemId: z.string().min(1).optional(),
+      since: z.string().min(1).optional()
+    })
+    .merge(activityQuerySchema)
+    .parse(request.query);
+
+  const cursor = query.cursor ? decodeActivityCursor(query.cursor) : null;
+  if (query.cursor && !cursor) {
+    return reply.status(400).send({ message: "Invalid cursor" });
+  }
+
+  const since = query.since ? parseIsoDate(query.since) : null;
+  if (query.since && !since) {
+    return reply.status(400).send({ message: "Invalid since date" });
+  }
+
+  const where = buildActivityWhere({
+    projectId: agentAuth.projectId,
+    itemId: query.itemId,
+    type: query.type,
+    since: since || undefined,
+    cursor
+  });
+
+  const rows = await prisma.itemActivity.findMany({
+    where,
+    include: itemActivityWithRelationsInclude,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: query.limit + 1
+  });
+
+  const hasNext = rows.length > query.limit;
+  const pageRows = hasNext ? rows.slice(0, query.limit) : rows;
+
+  return {
+    projectId: agentAuth.projectId,
+    activities: pageRows.map(serializeItemActivity),
+    page: {
+      limit: query.limit,
+      nextCursor:
+        hasNext && pageRows.length > 0 ? encodeActivityCursor(pageRows[pageRows.length - 1]) : null
+    }
+  };
+});
+
 app.get("/api/agent/v1/project", async (request, reply) => {
   const agentAuth = getAgentAuth(request);
 
@@ -2118,6 +2774,56 @@ app.get("/api/agent/v1/issues/:id", async (request, reply) => {
   return { issue };
 });
 
+app.get("/api/agent/v1/issues/:id/activities", async (request, reply) => {
+  const agentAuth = getAgentAuth(request);
+  const params = z.object({ id: z.string().min(1) }).parse(request.params);
+  const query = activityQuerySchema.parse(request.query);
+  const cursor = query.cursor ? decodeActivityCursor(query.cursor) : null;
+
+  if (query.cursor && !cursor) {
+    return reply.status(400).send({ message: "Invalid cursor" });
+  }
+
+  const issue = await prisma.item.findFirst({
+    where: {
+      id: params.id,
+      projectId: agentAuth.projectId
+    },
+    select: { id: true }
+  });
+
+  if (!issue) {
+    return reply.status(404).send({ message: "Issue not found" });
+  }
+
+  const where = buildActivityWhere({
+    projectId: agentAuth.projectId,
+    itemId: params.id,
+    type: query.type,
+    cursor
+  });
+
+  const rows = await prisma.itemActivity.findMany({
+    where,
+    include: itemActivityWithRelationsInclude,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: query.limit + 1
+  });
+
+  const hasNext = rows.length > query.limit;
+  const pageRows = hasNext ? rows.slice(0, query.limit) : rows;
+
+  return {
+    issueId: params.id,
+    activities: pageRows.map(serializeItemActivity),
+    page: {
+      limit: query.limit,
+      nextCursor:
+        hasNext && pageRows.length > 0 ? encodeActivityCursor(pageRows[pageRows.length - 1]) : null
+    }
+  };
+});
+
 app.get("/api/agent/v1/issues/:id/prompt", async (request, reply) => {
   const agentAuth = getAgentAuth(request);
   const params = z.object({ id: z.string().min(1) }).parse(request.params);
@@ -2227,6 +2933,7 @@ app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
   }
 
   const statusChanged = existing.status !== body.status;
+  const actor = agentActivityActor(agentAuth);
   const transactionResult = await prisma.$transaction(async (tx) => {
     let item: ItemWithRelations;
 
@@ -2239,13 +2946,14 @@ app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
         include: itemWithRelationsInclude
       });
 
-      await tx.itemActivity.create({
-        data: {
-          itemId: existing.id,
-          actorType: "AGENT",
-          agentKeyId: agentAuth.keyId,
-          type: "STATUS_CHANGE",
-          message: `Status changed from ${existing.status} to ${body.status}`
+      await recordItemActivity(tx, {
+        itemId: existing.id,
+        actor,
+        type: "STATUS_CHANGE",
+        message: `Status changed from ${existing.status} to ${body.status}`,
+        metadata: {
+          from: existing.status,
+          to: body.status
         }
       });
     } else {
@@ -2262,8 +2970,8 @@ app.post("/api/agent/v1/issues/:id/resolve", async (request, reply) => {
     const resolutionActivity = await tx.itemActivity.create({
       data: {
         itemId: existing.id,
-        actorType: "AGENT",
-        agentKeyId: agentAuth.keyId,
+        actorType: actor.actorType,
+        agentKeyId: actor.agentKeyId,
         type: "RESOLUTION_NOTE",
         message: body.resolutionNote
       }

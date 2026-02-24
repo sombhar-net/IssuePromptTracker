@@ -25,6 +25,12 @@ A mobile-friendly and web-ready app to capture issues/features with screenshots,
 - File storage: local persistent volume for screenshots
 - Deployment: Docker Compose (Coolify-ready)
 
+## Agent integrations docs
+- [Agentic coding guide](./apps/api/docs/agentic-coding.md)
+- [Agent API reference](./apps/api/docs/agent-api-reference.md)
+- [Polling playbook](./apps/api/docs/agent-polling-playbook.md)
+- API-served markdown docs endpoint: `GET /api/agent/v1/docs.md`
+
 ## Branding assets
 - Generated files live in `apps/web/public/branding`.
 - Regenerate icon/logo/screenshot assets:
@@ -124,6 +130,8 @@ Important:
 - `/api/projects` CRUD
 - `/api/categories` CRUD
 - `/api/items` CRUD + filters
+- `/api/activities` (GET, project-scoped activity feed for JWT users)
+- `/api/items/:id/activities` (GET)
 - `/api/items/:id/images` upload/delete/reorder
 - `/api/prompts/item/:id`
 - `/api/prompts/project/:projectId`
@@ -131,11 +139,14 @@ Important:
 - `/api/projects/:projectId/agent-keys` (POST/GET)
 - `/api/projects/:projectId/agent-keys/:keyId` (DELETE revoke)
 - `/api/agent/v1/project`
+- `/api/agent/v1/activities`
 - `/api/agent/v1/issues`
 - `/api/agent/v1/issues/:id`
+- `/api/agent/v1/issues/:id/activities`
 - `/api/agent/v1/issues/:id/prompt`
 - `/api/agent/v1/issues/:id/resolve`
 - `/api/agent/v1/issues/:issueId/images/:imageId`
+- `/api/agent/v1/docs.md`
 - `/api/exports/item/:id.zip`
 - `/api/exports/project/:projectId.zip`
 - `/uploads/*` static screenshots

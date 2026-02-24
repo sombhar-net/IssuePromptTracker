@@ -1,6 +1,14 @@
 export type ItemType = "issue" | "feature";
 export type ItemStatus = "open" | "in_progress" | "resolved" | "archived";
 export type ItemPriority = "low" | "medium" | "high" | "critical";
+export type ItemActivityType =
+  | "ITEM_CREATED"
+  | "ITEM_UPDATED"
+  | "IMAGE_UPLOADED"
+  | "IMAGE_DELETED"
+  | "IMAGES_REORDERED"
+  | "RESOLUTION_NOTE"
+  | "STATUS_CHANGE";
 export type CategoryKind = "issue" | "feature" | "other";
 export type PromptTemplateKind = CategoryKind;
 export type UserRole = "ADMIN" | "USER";
@@ -83,6 +91,52 @@ export interface Item {
   project: Project;
   category: Category | null;
   images: ItemImage[];
+}
+
+export interface ItemActivityActorUser {
+  kind: "user";
+  userId: string | null;
+  email: string | null;
+  displayName: string | null;
+}
+
+export interface ItemActivityActorAgent {
+  kind: "agent";
+  keyId: string | null;
+  name: string | null;
+  prefix: string | null;
+}
+
+export type ItemActivityActor = ItemActivityActorUser | ItemActivityActorAgent;
+
+export interface ItemActivity {
+  id: string;
+  itemId: string;
+  type: ItemActivityType;
+  actorType: "USER" | "AGENT";
+  message: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  actor: ItemActivityActor;
+  item: {
+    id: string;
+    title: string;
+    type: ItemType;
+    projectId: string;
+  };
+}
+
+export interface ActivityPageInfo {
+  limit: number;
+  nextCursor: string | null;
+}
+
+export interface ActivityFeedResponse {
+  projectId?: string;
+  itemId?: string;
+  issueId?: string;
+  activities: ItemActivity[];
+  page: ActivityPageInfo;
 }
 
 export interface ItemPayload {

@@ -33,6 +33,8 @@ import {
   downloadItemExport,
   downloadProjectExport,
   getAuthToken,
+  getItemActivities,
+  getProjectActivities,
   getCategories,
   getItems,
   getMe,
@@ -55,6 +57,8 @@ import type {
   Category,
   CategoryKind,
   Item,
+  ItemActivity,
+  ItemActivityType,
   ItemFilters,
   ItemPayload,
   ItemPriority,
@@ -72,13 +76,28 @@ type AuthMode = "login" | "register";
 type ReportError = (error: unknown, fallbackMessage: string) => void;
 
 type ReportNotice = (message: string) => void;
+type ToastKind = "error" | "success";
+interface ToastState {
+  id: number;
+  kind: ToastKind;
+  message: string;
+}
 type ItemFormField = "type" | "categoryId" | "title" | "description" | "status" | "priority";
 type ItemFormErrors = Partial<Record<ItemFormField, string>>;
-type IssueFormTab = "details" | "prompt";
+type IssueFormTab = "details" | "prompt" | "activity";
 
 const ITEM_TYPES: ItemType[] = ["issue", "feature"];
 const ITEM_STATUSES: ItemStatus[] = ["open", "in_progress", "resolved", "archived"];
 const ITEM_PRIORITIES: ItemPriority[] = ["low", "medium", "high", "critical"];
+const ITEM_ACTIVITY_TYPES: ItemActivityType[] = [
+  "ITEM_CREATED",
+  "ITEM_UPDATED",
+  "IMAGE_UPLOADED",
+  "IMAGE_DELETED",
+  "IMAGES_REORDERED",
+  "RESOLUTION_NOTE",
+  "STATUS_CHANGE"
+];
 const CATEGORY_KINDS: CategoryKind[] = ["issue", "feature", "other"];
 const PROMPT_TEMPLATE_KINDS: PromptTemplateKind[] = ["issue", "feature", "other"];
 const EMPTY_PROMPT_TEMPLATES: PromptTemplateSet = {
@@ -86,6 +105,7 @@ const EMPTY_PROMPT_TEMPLATES: PromptTemplateSet = {
   feature: "",
   other: ""
 };
+const TOAST_DURATION_MS = 5000;
 const ITEM_FORM_FIELDS: ItemFormField[] = [
   "type",
   "categoryId",
@@ -173,6 +193,24 @@ function formatDateTime(value: string | null): string {
   }
 
   return parsed.toLocaleString();
+}
+
+function formatActivityTypeLabel(type: ItemActivityType): string {
+  return type
+    .split("_")
+    .map((token) => token[0]?.toUpperCase() + token.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function formatActivityActor(activity: ItemActivity): string {
+  if (activity.actor.kind === "agent") {
+    if (activity.actor.name) {
+      return `${activity.actor.name}${activity.actor.prefix ? ` (${activity.actor.prefix})` : ""}`;
+    }
+    return activity.actor.prefix ? `Agent ${activity.actor.prefix}` : "Agent";
+  }
+
+  return activity.actor.displayName || activity.actor.email || "User";
 }
 
 function escapeHtml(value: string): string {
@@ -466,8 +504,6 @@ interface AuthScreenProps {
   authEmail: string;
   authPassword: string;
   authDisplayName: string;
-  errorMessage: string;
-  notice: string;
   onAuthModeChange: (mode: AuthMode) => void;
   onAuthEmailChange: (value: string) => void;
   onAuthPasswordChange: (value: string) => void;
@@ -482,8 +518,6 @@ function AuthCard(props: AuthScreenProps): JSX.Element {
     authEmail,
     authPassword,
     authDisplayName,
-    errorMessage,
-    notice,
     onAuthModeChange,
     onAuthEmailChange,
     onAuthPasswordChange,
@@ -498,9 +532,6 @@ function AuthCard(props: AuthScreenProps): JSX.Element {
         <h2>Sign in to continue</h2>
         <p>Manage projects, issues, screenshots, and AI-ready prompt exports.</p>
       </header>
-
-      {errorMessage && <div className="alert error">{errorMessage}</div>}
-      {notice && <div className="alert success">{notice}</div>}
 
       <div className="pill-switch" role="tablist" aria-label="Authentication mode">
         <button
@@ -643,6 +674,25 @@ function AuthScreen(props: AuthScreenProps): JSX.Element {
   );
 }
 
+function ToastRegion(props: { toast: ToastState | null }): JSX.Element | null {
+  const { toast } = props;
+
+  if (!toast) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-atomic="true"
+      aria-live={toast.kind === "error" ? "assertive" : "polite"}
+      className="toast-stack"
+      role="status"
+    >
+      <div className={`toast ${toast.kind}`}>{toast.message}</div>
+    </div>
+  );
+}
+
 interface ProjectsListPageProps {
   projects: Project[];
   selectedProjectId: string;
@@ -697,8 +747,8 @@ function ProjectsListPage(props: ProjectsListPageProps): JSX.Element {
 
         <div className="row-stack">
           {projects.map((project) => (
-            <div className="row-card" key={project.id}>
-              <label className="row-title">
+            <div className="row-card project-row" key={project.id}>
+              <label className="row-title project-row-title">
                 <input
                   checked={selectedProjectId === project.id}
                   onChange={() => onSelectProject(project.id)}
@@ -707,23 +757,34 @@ function ProjectsListPage(props: ProjectsListPageProps): JSX.Element {
                 />
                 <span>{project.name}</span>
               </label>
-              <div className="inline-actions">
-                <button className="button-with-icon" onClick={() => navigate(`/projects/${project.id}/keys`)} type="button">
+              <div className="inline-actions project-row-actions">
+                <button
+                  aria-label={`Manage API keys for ${project.name}`}
+                  className="icon-button"
+                  onClick={() => navigate(`/projects/${project.id}/keys`)}
+                  title="Keys"
+                  type="button"
+                >
                   <AppIcon name="key" />
-                  Keys
-                </button>
-                <button className="button-with-icon" onClick={() => navigate(`/projects/${project.id}/edit`)} type="button">
-                  <AppIcon name="edit" />
-                  Edit
                 </button>
                 <button
-                  className="danger button-with-icon"
+                  aria-label={`Edit ${project.name}`}
+                  className="icon-button"
+                  onClick={() => navigate(`/projects/${project.id}/edit`)}
+                  title="Edit"
+                  type="button"
+                >
+                  <AppIcon name="edit" />
+                </button>
+                <button
+                  aria-label={`Delete ${project.name}`}
+                  className="danger icon-button"
                   disabled={busy}
                   onClick={() => void removeProject(project)}
+                  title="Delete"
                   type="button"
                 >
                   <AppIcon name="trash" />
-                  Delete
                 </button>
               </div>
             </div>
@@ -1402,6 +1463,64 @@ function ScreenshotCopyList(props: ScreenshotCopyListProps): JSX.Element | null 
   );
 }
 
+interface ActivityTimelineProps {
+  activities: ItemActivity[];
+  loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  emptyMessage: string;
+  onLoadMore: () => void;
+  onOpenItem?: (itemId: string) => void;
+}
+
+function ActivityTimeline(props: ActivityTimelineProps): JSX.Element {
+  const { activities, loading, loadingMore, hasMore, emptyMessage, onLoadMore, onOpenItem } = props;
+
+  if (loading) {
+    return <p className="helper">Loading activity...</p>;
+  }
+
+  if (!loading && activities.length === 0) {
+    return <p className="helper">{emptyMessage}</p>;
+  }
+
+  return (
+    <div className="activity-feed">
+      {activities.map((activity) => (
+        <article className="activity-card" key={activity.id}>
+          <div className="activity-head">
+            <span className="tag-chip">{formatActivityTypeLabel(activity.type)}</span>
+            <span className="helper">{formatDateTime(activity.createdAt)}</span>
+          </div>
+          <p>{activity.message}</p>
+          <div className="activity-meta">
+            <span>{formatActivityActor(activity)}</span>
+            <span>{activity.item.title || "Untitled item"}</span>
+          </div>
+          {onOpenItem && (
+            <button className="button-with-icon" onClick={() => onOpenItem(activity.itemId)} type="button">
+              <AppIcon name="edit" />
+              Open Item
+            </button>
+          )}
+          {activity.metadata && (
+            <details>
+              <summary>Metadata</summary>
+              <pre>{JSON.stringify(activity.metadata, null, 2)}</pre>
+            </details>
+          )}
+        </article>
+      ))}
+      {hasMore && (
+        <button className="button-with-icon" disabled={loadingMore} onClick={onLoadMore} type="button">
+          <AppIcon name="refresh" />
+          {loadingMore ? "Loading..." : "Load More"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function IssuesPage(props: IssuesPageProps): JSX.Element {
   const { selectedProjectId, selectedProjectName, categories, reportError, reportNotice, mode } = props;
   const navigate = useNavigate();
@@ -1425,6 +1544,11 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   const [issuePromptText, setIssuePromptText] = useState("");
   const [issuePromptFallback, setIssuePromptFallback] = useState("");
   const [promptBusy, setPromptBusy] = useState(false);
+  const [issueActivities, setIssueActivities] = useState<ItemActivity[]>([]);
+  const [issueActivitiesCursor, setIssueActivitiesCursor] = useState<string | null>(null);
+  const [issueActivitiesLoading, setIssueActivitiesLoading] = useState(false);
+  const [issueActivitiesLoadingMore, setIssueActivitiesLoadingMore] = useState(false);
+  const [activityTypeFilter, setActivityTypeFilter] = useState<ItemActivityType | "">("");
   const [listFilters, setListFilters] = useState<ItemFilters>({
     search: ""
   });
@@ -1639,6 +1763,9 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     setFormTab("details");
     setIssuePromptText("");
     setIssuePromptFallback("");
+    setIssueActivities([]);
+    setIssueActivitiesCursor(null);
+    setActivityTypeFilter("");
   }, [isFormMode, editItemId]);
 
   useEffect(() => {
@@ -1673,6 +1800,53 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
       cancelled = true;
     };
   }, [formTab, isFormMode, promptItemId, reportError]);
+
+  async function loadIssueActivities(options?: {
+    append?: boolean;
+    cursor?: string | null;
+  }): Promise<void> {
+    if (!promptItemId) {
+      setIssueActivities([]);
+      setIssueActivitiesCursor(null);
+      return;
+    }
+
+    const append = Boolean(options?.append);
+    const cursor = options?.cursor ?? (append ? issueActivitiesCursor : null);
+
+    try {
+      if (append) {
+        setIssueActivitiesLoadingMore(true);
+      } else {
+        setIssueActivitiesLoading(true);
+      }
+
+      const response = await getItemActivities(promptItemId, {
+        cursor: cursor || undefined,
+        limit: 25,
+        type: activityTypeFilter || undefined
+      });
+
+      setIssueActivities((current) =>
+        append ? [...current, ...response.activities] : response.activities
+      );
+      setIssueActivitiesCursor(response.page.nextCursor);
+    } catch (error) {
+      reportError(error, "Failed to load item activity");
+    } finally {
+      setIssueActivitiesLoading(false);
+      setIssueActivitiesLoadingMore(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isFormMode || formTab !== "activity" || !promptItemId) {
+      return;
+    }
+
+    void loadIssueActivities({ append: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formTab, isFormMode, promptItemId, activityTypeFilter]);
 
   useEffect(() => {
     if (!previewImage) {
@@ -1869,6 +2043,9 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     setFormTab("details");
     setIssuePromptText("");
     setIssuePromptFallback("");
+    setIssueActivities([]);
+    setIssueActivitiesCursor(null);
+    setActivityTypeFilter("");
   }
 
   function beginEdit(item: Item): void {
@@ -1889,6 +2066,9 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
     setFormTab("details");
     setIssuePromptText("");
     setIssuePromptFallback("");
+    setIssueActivities([]);
+    setIssueActivitiesCursor(null);
+    setActivityTypeFilter("");
   }
 
   async function submitIssue(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -2099,6 +2279,16 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
                 type="button"
               >
                 Prompt
+              </button>
+              <button
+                aria-selected={formTab === "activity"}
+                className={formTab === "activity" ? "active" : ""}
+                disabled={!isEditMode || missingEditTarget}
+                onClick={() => setFormTab("activity")}
+                role="tab"
+                type="button"
+              >
+                Activity
               </button>
             </div>
 
@@ -2479,6 +2669,57 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
               </div>
             )}
 
+            {formTab === "activity" && (
+              <div className="prompt-tab-panel">
+                {!isEditMode || !promptItemId || missingEditTarget ? (
+                  <p className="helper">Save this item first, then use the Activity tab.</p>
+                ) : (
+                  <>
+                    <div className="inline-actions">
+                      <label>
+                        Event type
+                        <select
+                          value={activityTypeFilter}
+                          onChange={(event) =>
+                            setActivityTypeFilter((event.target.value as ItemActivityType) || "")
+                          }
+                        >
+                          <option value="">All events</option>
+                          {ITEM_ACTIVITY_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {formatActivityTypeLabel(type)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        className="button-with-icon"
+                        disabled={issueActivitiesLoading || issueActivitiesLoadingMore}
+                        onClick={() => void loadIssueActivities({ append: false })}
+                        type="button"
+                      >
+                        <AppIcon name="refresh" />
+                        Refresh
+                      </button>
+                    </div>
+                    <ActivityTimeline
+                      activities={issueActivities}
+                      emptyMessage="No activity recorded for this item yet."
+                      hasMore={Boolean(issueActivitiesCursor)}
+                      loading={issueActivitiesLoading}
+                      loadingMore={issueActivitiesLoadingMore}
+                      onLoadMore={() =>
+                        void loadIssueActivities({
+                          append: true,
+                          cursor: issueActivitiesCursor
+                        })
+                      }
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
             {missingEditTarget && (
               <p className="helper">Could not find this item in the currently selected project.</p>
             )}
@@ -2790,6 +3031,181 @@ interface PromptsPageProps {
   categories: Category[];
   reportError: ReportError;
   reportNotice: ReportNotice;
+}
+
+interface ActivityPageProps {
+  selectedProjectId: string;
+  selectedProjectName: string;
+  reportError: ReportError;
+  reportNotice: ReportNotice;
+}
+
+function ActivityPage(props: ActivityPageProps): JSX.Element {
+  const { selectedProjectId, selectedProjectName, reportError, reportNotice } = props;
+  const navigate = useNavigate();
+  const [activities, setActivities] = useState<ItemActivity[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [items, setItems] = useState<Item[]>([]);
+  const [typeFilter, setTypeFilter] = useState<ItemActivityType | "">("");
+  const [itemFilter, setItemFilter] = useState("");
+
+  async function loadItemOptions(): Promise<void> {
+    if (!selectedProjectId) {
+      setItems([]);
+      return;
+    }
+
+    try {
+      const projectItems = await getItems(selectedProjectId);
+      setItems(projectItems);
+    } catch (error) {
+      reportError(error, "Failed to load project items for activity filters");
+    }
+  }
+
+  async function loadActivities(options?: {
+    append?: boolean;
+    cursor?: string | null;
+  }): Promise<void> {
+    if (!selectedProjectId) {
+      setActivities([]);
+      setCursor(null);
+      return;
+    }
+
+    const append = Boolean(options?.append);
+    const nextCursor = options?.cursor ?? (append ? cursor : null);
+
+    try {
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+
+      const response = await getProjectActivities(selectedProjectId, {
+        cursor: nextCursor || undefined,
+        limit: 50,
+        itemId: itemFilter || undefined,
+        type: typeFilter || undefined
+      });
+
+      setActivities((current) =>
+        append ? [...current, ...response.activities] : response.activities
+      );
+      setCursor(response.page.nextCursor);
+    } catch (error) {
+      reportError(error, "Failed to load project activity");
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }
+
+  useEffect(() => {
+    setActivities([]);
+    setCursor(null);
+    setItemFilter("");
+    setTypeFilter("");
+    if (!selectedProjectId) {
+      return;
+    }
+
+    void loadItemOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      return;
+    }
+
+    void loadActivities({ append: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProjectId, typeFilter, itemFilter]);
+
+  if (!selectedProjectId) {
+    return (
+      <section className="page-section">
+        <article className="panel-card">
+          <h2>No Project Selected</h2>
+          <p className="helper">Select a project on the Projects page to view activity.</p>
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="page-section">
+      <header className="section-head">
+        <div>
+          <p className="kicker">Activity</p>
+          <h2>{selectedProjectName}</h2>
+        </div>
+        <button
+          className="button-with-icon"
+          disabled={loading || loadingMore}
+          onClick={() => {
+            void loadActivities({ append: false });
+            reportNotice("Activity refreshed");
+          }}
+          type="button"
+        >
+          <AppIcon name="refresh" />
+          Refresh
+        </button>
+      </header>
+
+      <article className="panel-card">
+        <div className="grid-two">
+          <label>
+            Event type
+            <select
+              value={typeFilter}
+              onChange={(event) => setTypeFilter((event.target.value as ItemActivityType) || "")}
+            >
+              <option value="">All events</option>
+              {ITEM_ACTIVITY_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {formatActivityTypeLabel(type)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Item
+            <select value={itemFilter} onChange={(event) => setItemFilter(event.target.value)}>
+              <option value="">All items</option>
+              {items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title || "Untitled item"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </article>
+
+      <article className="panel-card">
+        <ActivityTimeline
+          activities={activities}
+          emptyMessage="No activity found for the current filters."
+          hasMore={Boolean(cursor)}
+          loading={loading}
+          loadingMore={loadingMore}
+          onLoadMore={() =>
+            void loadActivities({
+              append: true,
+              cursor
+            })
+          }
+          onOpenItem={(itemId) => navigate(`/issues/${itemId}/edit`)}
+        />
+      </article>
+    </section>
+  );
 }
 
 function PromptsPage(props: PromptsPageProps): JSX.Element {
@@ -3412,8 +3828,6 @@ interface ShellProps {
   setSelectedProjectId: (projectId: string) => void;
   refreshWorkspace: (preferredProjectId?: string) => Promise<void>;
   onLogout: () => void;
-  errorMessage: string;
-  notice: string;
   reportError: ReportError;
   reportNotice: ReportNotice;
 }
@@ -3427,8 +3841,6 @@ function AppShell(props: ShellProps): JSX.Element {
     setSelectedProjectId,
     refreshWorkspace,
     onLogout,
-    errorMessage,
-    notice,
     reportError,
     reportNotice
   } = props;
@@ -3439,9 +3851,12 @@ function AppShell(props: ShellProps): JSX.Element {
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId]
   );
+  const identityName = currentUser.displayName?.trim() || currentUser.email;
+  const identityInitial = identityName.charAt(0).toUpperCase();
 
   const navItems = [
     { to: "/issues", label: "Issues" },
+    { to: "/activity", label: "Activity" },
     { to: "/projects", label: "Projects" },
     { to: "/categories", label: "Categories" },
     { to: "/prompts", label: "Prompts" },
@@ -3496,15 +3911,22 @@ function AppShell(props: ShellProps): JSX.Element {
         </nav>
 
         <div className="identity-card">
-          <div>
-            <strong>{currentUser.displayName || currentUser.email}</strong>
-            <p>{currentUser.email}</p>
+          <div className="identity-main">
+            <div aria-hidden="true" className="identity-avatar">
+              {identityInitial}
+            </div>
+            <div className="identity-copy">
+              <strong>{identityName}</strong>
+              <p>{currentUser.email}</p>
+            </div>
           </div>
-          <span className="tag-chip">{currentUser.role}</span>
-          <button className="button-with-icon" onClick={onLogout} type="button">
-            <AppIcon name="logout" />
-            Logout
-          </button>
+          <div className="identity-actions">
+            {/* <span className="tag-chip">{currentUser.role}</span> */}
+            <button className="button-with-icon identity-logout" onClick={onLogout} type="button">
+              <AppIcon name="logout" />
+              Logout
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -3536,11 +3958,19 @@ function AppShell(props: ShellProps): JSX.Element {
           </div>
         </header>
 
-        {errorMessage && <div className="alert error">{errorMessage}</div>}
-        {notice && <div className="alert success">{notice}</div>}
-
         <div className="route-host">
           <Routes>
+            <Route
+              path="/activity"
+              element={
+                <ActivityPage
+                  selectedProjectId={selectedProjectId}
+                  selectedProjectName={selectedProject?.name || "No Project"}
+                  reportError={reportError}
+                  reportNotice={reportNotice}
+                />
+              }
+            />
             <Route
               path="/projects"
               element={
@@ -3701,9 +4131,8 @@ export default function App(): JSX.Element {
   const [projects, setProjects] = useState<Project[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(getStoredProjectId);
-
-  const [errorMessage, setErrorMessage] = useState("");
-  const [notice, setNotice] = useState("");
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const toastIdRef = useRef(0);
 
   function resetWorkspaceState(): void {
     setProjects([]);
@@ -3754,14 +4183,25 @@ export default function App(): JSX.Element {
     return message;
   }
 
+  function showToast(kind: ToastKind, message: string): void {
+    const trimmed = message.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    setToast({
+      id: ++toastIdRef.current,
+      kind,
+      message: trimmed
+    });
+  }
+
   const reportError: ReportError = (error, fallbackMessage) => {
-    setNotice("");
-    setErrorMessage(resolveApiError(error, fallbackMessage));
+    showToast("error", resolveApiError(error, fallbackMessage));
   };
 
   const reportNotice: ReportNotice = (message) => {
-    setErrorMessage("");
-    setNotice(message);
+    showToast("success", message);
   };
 
   async function refreshWorkspace(preferredProjectId?: string): Promise<void> {
@@ -3826,17 +4266,30 @@ export default function App(): JSX.Element {
     persistProjectId(selectedProjectId);
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, TOAST_DURATION_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [toast]);
+
   async function submitAuth(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
 
     if (!authEmail.trim() || !authPassword.trim()) {
-      setErrorMessage("Email and password are required");
+      reportError(undefined, "Email and password are required");
       return;
     }
 
     try {
       setBusy(true);
-      setErrorMessage("");
       const normalizedEmail = authEmail.trim().toLowerCase();
 
       if (authMode === "login") {
@@ -3869,7 +4322,7 @@ export default function App(): JSX.Element {
     clearAuthToken();
     setCurrentUser(null);
     resetWorkspaceState();
-    setNotice("Signed out");
+    reportNotice("Signed out");
   }
 
   if (!authReady) {
@@ -3887,38 +4340,40 @@ export default function App(): JSX.Element {
 
   if (!currentUser) {
     return (
-      <AuthScreen
-        authDisplayName={authDisplayName}
-        authEmail={authEmail}
-        authMode={authMode}
-        authPassword={authPassword}
-        busy={busy}
-        errorMessage={errorMessage}
-        notice={notice}
-        onAuthDisplayNameChange={setAuthDisplayName}
-        onAuthEmailChange={setAuthEmail}
-        onAuthModeChange={setAuthMode}
-        onAuthPasswordChange={setAuthPassword}
-        onSubmit={submitAuth}
-      />
+      <>
+        <AuthScreen
+          authDisplayName={authDisplayName}
+          authEmail={authEmail}
+          authMode={authMode}
+          authPassword={authPassword}
+          busy={busy}
+          onAuthDisplayNameChange={setAuthDisplayName}
+          onAuthEmailChange={setAuthEmail}
+          onAuthModeChange={setAuthMode}
+          onAuthPasswordChange={setAuthPassword}
+          onSubmit={submitAuth}
+        />
+        <ToastRegion toast={toast} />
+      </>
     );
   }
 
   return (
-    <BrowserRouter>
-      <AppShell
-        categories={categories}
-        currentUser={currentUser}
-        errorMessage={errorMessage}
-        notice={notice}
-        onLogout={logout}
-        projects={projects}
-        refreshWorkspace={refreshWorkspace}
-        reportError={reportError}
-        reportNotice={reportNotice}
-        selectedProjectId={selectedProjectId}
-        setSelectedProjectId={setSelectedProjectId}
-      />
-    </BrowserRouter>
+    <>
+      <BrowserRouter>
+        <AppShell
+          categories={categories}
+          currentUser={currentUser}
+          onLogout={logout}
+          projects={projects}
+          refreshWorkspace={refreshWorkspace}
+          reportError={reportError}
+          reportNotice={reportNotice}
+          selectedProjectId={selectedProjectId}
+          setSelectedProjectId={setSelectedProjectId}
+        />
+      </BrowserRouter>
+      <ToastRegion toast={toast} />
+    </>
   );
 }

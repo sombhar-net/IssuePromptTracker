@@ -1,10 +1,12 @@
 import type {
+  ActivityFeedResponse,
   AuthMeResponse,
   AuthResponse,
   AuthUser,
   Category,
   CategoryKind,
   Item,
+  ItemActivityType,
   ItemFilters,
   ItemPayload,
   ItemStatus,
@@ -315,6 +317,37 @@ export async function updateItemStatus(id: string, status: ItemStatus): Promise<
     method: "PATCH",
     body: JSON.stringify({ status })
   });
+}
+
+export async function getItemActivities(
+  itemId: string,
+  options: { cursor?: string; limit?: number; type?: ItemActivityType } = {}
+): Promise<ActivityFeedResponse> {
+  const query = new URLSearchParams();
+  if (options.cursor) query.set("cursor", options.cursor);
+  if (options.limit) query.set("limit", String(options.limit));
+  if (options.type) query.set("type", options.type);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request<ActivityFeedResponse>(`/items/${itemId}/activities${suffix}`);
+}
+
+export async function getProjectActivities(
+  projectId: string,
+  options: {
+    cursor?: string;
+    limit?: number;
+    type?: ItemActivityType;
+    itemId?: string;
+    since?: string;
+  } = {}
+): Promise<ActivityFeedResponse> {
+  const query = new URLSearchParams({ projectId });
+  if (options.cursor) query.set("cursor", options.cursor);
+  if (options.limit) query.set("limit", String(options.limit));
+  if (options.type) query.set("type", options.type);
+  if (options.itemId) query.set("itemId", options.itemId);
+  if (options.since) query.set("since", options.since);
+  return request<ActivityFeedResponse>(`/activities?${query.toString()}`);
 }
 
 export async function deleteItem(id: string): Promise<void> {
