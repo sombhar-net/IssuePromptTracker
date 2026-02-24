@@ -87,16 +87,6 @@ When making changes, append an entry to **Change Log** below with:
 - Migration/env impact: none.
 - Verification performed:
   - `npm run build -w apps/web`
-- 2026-02-24
-- Fixed agent resolve error handling regression that surfaced as HTTP 500 on malformed JSON requests:
-  - updated API global error handler to preserve Fastify/client `4xx` status codes (e.g. invalid JSON body parse errors) instead of always returning `500`
-  - invalid JSON requests to `POST /api/agent/v1/issues/:id/resolve` now return `400` with actionable parser message
-  - valid resolve requests continue to succeed and return issue payload + resolution metadata
-- Migration/env impact: none.
-- Verification performed:
-  - `npm run build -w apps/api`
-  - malformed JSON request to `/api/agent/v1/issues/:id/resolve` returns `400` and parser message
-  - valid resolve request to `/api/agent/v1/issues/:id/resolve` returns `200`
 - Added reusable screenshot copy UI component and wired it into both prompt workflows:
   - issue form Prompt tab now shows per-screenshot copy buttons
   - `/prompts` page now shows per-screenshot copy buttons for the selected item (same component reused)
@@ -525,3 +515,13 @@ When making changes, append an entry to **Change Log** below with:
   - no new environment variables
 - Verification performed:
   - `npm run build -w apps/web`
+- 2026-02-24
+- Fixed agent API error handling so malformed JSON no longer appears as an internal server failure:
+  - updated `app.setErrorHandler` in `apps/api/src/server.ts` to preserve explicit client-status errors (`4xx`) emitted by Fastify
+  - malformed JSON on `POST /api/agent/v1/issues/:id/resolve` now returns `400` with parser message instead of `500 Unexpected server error`
+  - valid resolve calls still succeed and return issue + resolution payload
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/api`
+  - malformed JSON request to `/api/agent/v1/issues/:id/resolve` returns `400`
+  - valid JSON request to `/api/agent/v1/issues/:id/resolve` returns `200`
