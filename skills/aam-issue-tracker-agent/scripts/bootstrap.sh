@@ -9,6 +9,17 @@ required_env() {
   fi
 }
 
+required_command() {
+  local name="$1"
+  if ! command -v "${name}" >/dev/null 2>&1; then
+    echo "Missing required command: ${name}" >&2
+    exit 1
+  fi
+}
+
+required_command "curl"
+required_command "python3"
+
 required_env "AAM_API_BASE_URL"
 required_env "AAM_API_KEY"
 
@@ -29,13 +40,22 @@ curl_args=(
   --show-error
   --fail
   --max-time "${timeout_seconds}"
-  --header "X-AAM-API-Key: ${AAM_API_KEY}"
-  --header "Accept: application/json"
 )
 
 if [[ "${AAM_INSECURE_TLS:-0}" == "1" ]]; then
+  echo "Warning: AAM_INSECURE_TLS=1 disables TLS certificate verification." >&2
   curl_args+=(-k)
 fi
+
+api_get() {
+  local url="$1"
+
+  curl "${curl_args[@]}" --config - <<EOF
+url = "${url}"
+header = "X-AAM-API-Key: ${AAM_API_KEY}"
+header = "Accept: application/json"
+EOF
+}
 
 json_field() {
   local input="$1"
@@ -68,7 +88,7 @@ else:
 }
 
 echo "Checking agent project context..."
-project_json="$(curl "${curl_args[@]}" "${base_url}/agent/v1/project")"
+project_json="$(api_get "${base_url}/agent/v1/project")"
 project_id="$(json_field "${project_json}" "project.id")"
 project_name="$(json_field "${project_json}" "project.name")"
 
@@ -85,7 +105,7 @@ fi
 echo "Project: ${project_name} (${project_id})"
 
 echo "Checking activity feed connectivity..."
-activities_json="$(curl "${curl_args[@]}" "${base_url}/agent/v1/activities?limit=1")"
+activities_json="$(api_get "${base_url}/agent/v1/activities?limit=1")"
 activity_count="$(json_field "${activities_json}" "activities")"
 next_cursor="$(json_field "${activities_json}" "page.nextCursor")"
 

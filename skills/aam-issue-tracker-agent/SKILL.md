@@ -7,15 +7,19 @@ description: Use Issue Prompt Tracker agent APIs to build or operate coding auto
 
 ## Quick Start
 
-1. Export required environment variables:
+1. Prerequisites:
+   - `bash`, `curl`, and `python3`
+2. Export required environment variables:
    - `AAM_API_BASE_URL` (example: `https://tracker.example.com/api`)
    - `AAM_API_KEY` (format: `aam_pk_<keyId>_<secret>`)
-2. Optionally export:
+3. Optionally export:
    - `AAM_PROJECT_ID` (expected project guardrail)
    - `AAM_POLL_SECONDS` (default suggestion: `30`)
    - `AAM_TIMEOUT_MS` (default suggestion: `15000`)
-3. Run bootstrap script to validate auth and project scope:
-   - `scripts/bootstrap.sh`
+   - `AAM_INSECURE_TLS=1` (dev-only; disables TLS verification)
+4. Run bootstrap script to validate auth and project scope:
+   - from this skill directory: `./scripts/bootstrap.sh`
+   - from repository root: `skills/aam-issue-tracker-agent/scripts/bootstrap.sh`
 
 ## Core Workflow
 
@@ -39,6 +43,7 @@ description: Use Issue Prompt Tracker agent APIs to build or operate coding auto
 - Retry only transient failures (`5xx`, network timeouts) with exponential backoff.
 - Do not retry validation/auth failures (`4xx`) blindly.
 - Reset polling with `since=<ISO timestamp>` if server returns `Invalid cursor`.
+- When using `since`, expect replay at the boundary and dedupe with activity `id`.
 - Never log full API keys.
 
 ## Command Patterns
@@ -46,14 +51,27 @@ description: Use Issue Prompt Tracker agent APIs to build or operate coding auto
 Use these minimal request patterns:
 
 ```bash
-curl -sS -H "X-AAM-API-Key: $AAM_API_KEY" "$AAM_API_BASE_URL/agent/v1/project"
-curl -sS -H "X-AAM-API-Key: $AAM_API_KEY" "$AAM_API_BASE_URL/agent/v1/activities?limit=50"
-curl -sS -H "X-AAM-API-Key: $AAM_API_KEY" "$AAM_API_BASE_URL/agent/v1/issues/$ISSUE_ID"
-curl -sS -X POST \
-  -H "X-AAM-API-Key: $AAM_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"status":"resolved","resolutionNote":"Implemented fix and validated behavior."}' \
-  "$AAM_API_BASE_URL/agent/v1/issues/$ISSUE_ID/resolve"
+base_url="${AAM_API_BASE_URL%/}"
+
+aam_get() {
+  local url="$1"
+  curl -sS --fail --config - <<EOF
+url = "${url}"
+header = "X-AAM-API-Key: ${AAM_API_KEY}"
+header = "Accept: application/json"
+EOF
+}
+
+aam_get "${base_url}/agent/v1/project"
+aam_get "${base_url}/agent/v1/activities?limit=50"
+aam_get "${base_url}/agent/v1/issues/${ISSUE_ID}"
+curl -sS --fail --config - --data '{"status":"resolved","resolutionNote":"Implemented fix and validated behavior."}' <<EOF
+url = "${base_url}/agent/v1/issues/${ISSUE_ID}/resolve"
+request = "POST"
+header = "X-AAM-API-Key: ${AAM_API_KEY}"
+header = "Content-Type: application/json"
+header = "Accept: application/json"
+EOF
 ```
 
 ## References

@@ -410,3 +410,32 @@ When making changes, append an entry to **Change Log** below with:
   - `unzip -l apps/web/public/skills/aam-issue-tracker-agent.zip`
   - `npm run build -w apps/web`
   - `npm run test`
+- 2026-02-24
+- Reorganized skill source layout and packaging workflow:
+  - moved agent skill source to `skills/aam-issue-tracker-agent`
+  - added reusable packaging script `scripts/package-skill.sh` with root command `npm run skills:package -- <skill-name>`
+  - zip output remains web-served at `apps/web/public/skills/aam-issue-tracker-agent.zip`
+- Added explicit skill install/use guidance for users:
+  - updated public `/agentic-coding` page with install commands and parallel-project env-file workflow
+  - updated `README.md` with skill source/output paths, packaging command, install commands, and env-isolation example
+- Added `.env.skills/` to `.gitignore` for local per-project skill secrets.
+- Migration/env impact:
+  - no DB migration
+  - new recommended local secret folder `.env.skills/` (gitignored)
+- Verification performed:
+  - `python3 /home/astinaam/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/aam-issue-tracker-agent`
+  - `npm run skills:package -- aam-issue-tracker-agent`
+  - `unzip -l apps/web/public/skills/aam-issue-tracker-agent.zip`
+  - `npm run build -w apps/web`
+  - `npm run test`
+- 2026-02-24
+- Updated skill package `skills/aam-issue-tracker-agent` for safer and clearer agent integration guidance:
+  - refreshed `SKILL.md` quick-start with explicit prerequisites, updated path usage for relocated skill directory, and dev-only TLS flag guidance
+  - added replay/deduplication guidance for `since` cursor recovery in both `SKILL.md` and `references/api-usage.md`
+  - replaced direct header-on-CLI curl examples with `--config -` helper patterns to avoid exposing API keys in process arguments
+  - hardened `scripts/bootstrap.sh` by adding command dependency checks (`curl`, `python3`), warning on insecure TLS mode, and secure request helper usage
+- Migration/env impact: none (documentation/script behavior only).
+- Verification performed:
+  - `bash -n skills/aam-issue-tracker-agent/scripts/bootstrap.sh`
+  - `rg -n -S -- "-H \"X-AAM-API-Key: \$AAM_API_KEY\"" skills/aam-issue-tracker-agent`
+  - `python3 /home/astinaam/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/aam-issue-tracker-agent`
