@@ -95,6 +95,26 @@ When making changes, append an entry to **Change Log** below with:
 - Verification performed:
   - `npm run build -w apps/web`
   - `npm run test`
+- 2026-02-24
+- Fixed residual responsiveness issues on `/agentic-coding`:
+  - split docs layout into dedicated public vs embedded shells (`docs-page-public` / `docs-page-embedded`) to prevent viewport-width overflow inside authenticated route host
+  - changed docs container sizing to parent-relative width (`min(1200px, 100%)`) instead of viewport-relative width
+  - added stronger wrapping for `pre`/`code` blocks to prevent horizontal overflow on narrow screens
+  - kept signed-in behavior without `Back to Sign In` and preserved `Back to App` action for authenticated sessions
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+  - `npm run test`
+- 2026-02-24
+- Improved public agent docs page responsiveness and signed-in UX:
+  - added responsive docs-page layout behavior across `1140px`, `880px`, and `740px` breakpoints
+  - hardened docs content rendering for long markdown/spec lines (`pre` wrapping, overflow guards, adaptive markdown viewport height)
+  - made landing-page `Agentic API Docs` CTA responsive on small screens
+  - `Back to Sign In` action is now shown only for unauthenticated docs visits; signed-in users see `Back to App` instead
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+  - `npm run test`
 - Added automatic system color-scheme adaptation for web UI:
   - introduced light/dark design tokens in `apps/web/src/styles.css` with `@media (prefers-color-scheme: dark)`
   - updated core surfaces/controls/overlays to use shared color variables so cards, forms, nav, modals, and dropzones switch theme automatically
@@ -353,7 +373,23 @@ When making changes, append an entry to **Change Log** below with:
 - Verification performed:
   - `npm run build -w packages/shared`
   - `npm run prisma:generate -w apps/api`
+  - `set -a; source .env; set +a; npm run prisma:migrate:deploy -w apps/api`
   - `npm run build -w apps/api`
   - `npm run build -w apps/web`
   - `npm run test`
   - `npm run build`
+- 2026-02-24
+- Improved web-only agent onboarding and key lifecycle UX:
+  - added explicit API key delete behavior in `/projects/:projectId/keys` using existing revoke endpoint semantics
+  - key action label changed from `Revoke` to `Delete`
+  - added `Show Revoked` toggle to inspect deleted/revoked keys while keeping active list clean by default
+- Added public agentic docs surface in web app:
+  - new public page route `/agentic-coding` (also `/agent-docs` alias)
+  - unauthenticated users can open docs directly from landing page via `Agentic API Docs` action
+  - docs page includes quickstart, skill-building workflow, endpoint summary, and live markdown spec from `GET /api/agent/v1/docs.md`
+  - authenticated shell also exposes `Agent Docs` navigation route
+- Updated README agent docs section with public page path.
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`
+  - `npm run test`

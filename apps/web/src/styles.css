@@ -73,6 +73,15 @@ button {
   padding: 0.62rem 0.72rem;
 }
 
+a.link-button {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0.62rem 0.72rem;
+  text-decoration: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -113,7 +122,8 @@ button {
   transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
 
-button:hover {
+button:hover,
+a.link-button:hover {
   transform: translateY(-1px);
 }
 
@@ -266,6 +276,67 @@ button.danger {
   display: grid;
   place-items: center;
   padding: clamp(0.95rem, 2vw, 1.75rem);
+}
+
+.docs-page {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+}
+
+.docs-page-public {
+  min-height: 100vh;
+  padding: clamp(0.95rem, 2vw, 1.75rem);
+}
+
+.docs-page-embedded {
+  min-height: 0;
+  padding: 0;
+}
+
+.docs-card {
+  width: min(1200px, 100%);
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.docs-card .section-head > div:first-child {
+  min-width: 0;
+}
+
+.docs-card .panel-card {
+  overflow: hidden;
+}
+
+.docs-card pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.docs-card code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.docs-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.docs-markdown {
+  max-height: 52vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  padding: 0.7rem;
+  font-size: 0.82rem;
 }
 
 .glow {
@@ -1428,6 +1499,10 @@ button.danger {
   .identity-logout {
     width: auto;
   }
+
+  .docs-card {
+    width: min(100%, 980px);
+  }
 }
 
 @media (max-width: 880px) {
@@ -1438,6 +1513,35 @@ button.danger {
   .landing-grid {
     grid-template-columns: 1fr;
     max-width: 720px;
+  }
+
+  .docs-page {
+    padding: 0.8rem;
+  }
+
+  .docs-card {
+    width: 100%;
+    border-radius: 16px;
+    padding: 0.8rem;
+  }
+
+  .docs-card .inline-actions {
+    width: 100%;
+  }
+
+  .docs-card .inline-actions .link-button {
+    flex: 1 1 auto;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .docs-markdown {
+    max-height: 45vh;
+    font-size: 0.8rem;
+  }
+
+  .docs-page-embedded {
+    padding: 0;
   }
 
   .toast-stack {
@@ -1521,6 +1625,36 @@ button.danger {
   .landing-actions button {
     flex: 1 1 auto;
     justify-content: center;
+  }
+
+  .landing-actions a.link-button {
+    flex: 1 1 auto;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .docs-card {
+    border-radius: 14px;
+    padding: 0.65rem;
+  }
+
+  .docs-card .panel-card {
+    padding: 0.65rem;
+  }
+
+  .docs-list {
+    padding-left: 1rem;
+    font-size: 0.92rem;
+  }
+
+  .docs-markdown {
+    max-height: 40vh;
+    font-size: 0.78rem;
+    padding: 0.6rem;
+  }
+
+  .docs-page-public {
+    padding: 0.72rem;
   }
 
   .landing-highlight {

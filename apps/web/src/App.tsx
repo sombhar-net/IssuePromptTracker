@@ -32,6 +32,7 @@ import {
   deleteProject,
   downloadItemExport,
   downloadProjectExport,
+  getAgentApiDocsMarkdown,
   getAuthToken,
   getItemActivities,
   getProjectActivities,
@@ -633,6 +634,10 @@ function AuthScreen(props: AuthScreenProps): JSX.Element {
               <AppIcon name="plus" />
               Create Account
             </button>
+            <a className="link-button button-with-icon" href="/agentic-coding">
+              <AppIcon name="folder" />
+              Agentic API Docs
+            </a>
           </div>
 
           <div className="landing-highlights">
@@ -669,6 +674,122 @@ function AuthScreen(props: AuthScreenProps): JSX.Element {
         </article>
 
         <AuthCard {...props} />
+      </section>
+    </main>
+  );
+}
+
+function AgentDocsPage(props: { showBackToSignIn?: boolean } = {}): JSX.Element {
+  const { showBackToSignIn = true } = props;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [markdown, setMarkdown] = useState("");
+  const pageClassName = showBackToSignIn
+    ? "docs-page docs-page-public"
+    : "docs-page docs-page-embedded";
+
+  useEffect(() => {
+    let active = true;
+
+    const load = async (): Promise<void> => {
+      try {
+        setLoading(true);
+        const content = await getAgentApiDocsMarkdown();
+        if (!active) {
+          return;
+        }
+        setMarkdown(content);
+        setError("");
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        const message = loadError instanceof Error ? loadError.message : "Failed to load agent docs.";
+        setError(message);
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <main className={pageClassName}>
+      <section className="panel-card docs-card">
+        <header className="section-head">
+          <div>
+            <p className="kicker">Public Docs</p>
+            <h2>Agentic Coding API Guide</h2>
+            <p className="helper">
+              Complete API usage, polling patterns, and skill-building workflow for Issue Prompt Tracker.
+            </p>
+          </div>
+          <div className="inline-actions">
+            {showBackToSignIn ? (
+              <a className="link-button button-with-icon" href="/">
+                <AppIcon name="back" />
+                Back to Sign In
+              </a>
+            ) : (
+              <a className="link-button button-with-icon" href="/issues">
+                <AppIcon name="back" />
+                Back to App
+              </a>
+            )}
+            <a className="link-button button-with-icon" href="/api/agent/v1/docs.md" target="_blank" rel="noreferrer">
+              <AppIcon name="download" />
+              Raw Markdown
+            </a>
+          </div>
+        </header>
+
+        <article className="panel-card">
+          <h3>Quickstart</h3>
+          <ol className="docs-list">
+            <li>Create a project and generate an agent API key from `/projects/:projectId/keys`.</li>
+            <li>Use header `X-AAM-API-Key` for all `/api/agent/v1/*` requests.</li>
+            <li>Bootstrap context with `GET /api/agent/v1/project`.</li>
+            <li>Poll `GET /api/agent/v1/activities` using `cursor` + `limit`.</li>
+            <li>Resolve work with `POST /api/agent/v1/issues/:id/resolve` including `resolutionNote`.</li>
+          </ol>
+        </article>
+
+        <article className="panel-card">
+          <h3>Build an Agent Skill</h3>
+          <ol className="docs-list">
+            <li>Define inputs: `project API key`, `poll interval`, and optional `filters`.</li>
+            <li>Implement idempotent activity handling keyed by immutable `activity.id`.</li>
+            <li>Fetch issue details on relevant activity types (`STATUS_CHANGE`, `ITEM_UPDATED`, `IMAGE_*`).</li>
+            <li>Execute coding task, then submit `resolve` with concise technical note.</li>
+            <li>Persist `nextCursor` only after successful processing of each page.</li>
+          </ol>
+        </article>
+
+        <article className="panel-card">
+          <h3>Core Endpoints</h3>
+          <pre>{`GET /api/agent/v1/project
+GET /api/agent/v1/issues
+GET /api/agent/v1/issues/:id
+GET /api/agent/v1/issues/:id/activities
+GET /api/agent/v1/activities
+GET /api/agent/v1/issues/:id/prompt
+POST /api/agent/v1/issues/:id/resolve
+GET /api/agent/v1/docs.md`}</pre>
+        </article>
+
+        <article className="panel-card">
+          <h3>Full Markdown Spec</h3>
+          {loading && <p className="helper">Loading markdown spec...</p>}
+          {!loading && error && <p className="helper">{error}</p>}
+          {!loading && !error && <pre className="docs-markdown">{markdown}</pre>}
+        </article>
       </section>
     </main>
   );
@@ -954,6 +1075,12 @@ function ProjectAgentKeysPage(props: ProjectAgentKeysPageProps): JSX.Element {
   const [keyName, setKeyName] = useState("");
   const [createdToken, setCreatedToken] = useState("");
   const [tokenCopied, setTokenCopied] = useState(false);
+  const [showRevokedKeys, setShowRevokedKeys] = useState(false);
+
+  const visibleKeys = useMemo(
+    () => (showRevokedKeys ? keys : keys.filter((key) => !key.revokedAt)),
+    [keys, showRevokedKeys]
+  );
 
   async function loadKeys(): Promise<void> {
     if (!projectId) {
@@ -1024,13 +1151,13 @@ function ProjectAgentKeysPage(props: ProjectAgentKeysPageProps): JSX.Element {
     }
   }
 
-  async function revokeKey(key: ProjectAgentKey): Promise<void> {
+  async function deleteKey(key: ProjectAgentKey): Promise<void> {
     if (!projectId) {
       return;
     }
 
     const confirmed = window.confirm(
-      `Revoke API key "${key.name}"? Agents using this key lose access immediately.`
+      `Delete API key "${key.name}"? This revokes access immediately and hides it from active key lists.`
     );
     if (!confirmed) {
       return;
@@ -1040,9 +1167,9 @@ function ProjectAgentKeysPage(props: ProjectAgentKeysPageProps): JSX.Element {
       setBusy(true);
       await revokeProjectAgentKey(projectId, key.keyId);
       await loadKeys();
-      reportNotice("API key revoked");
+      reportNotice("API key deleted");
     } catch (error) {
-      reportError(error, "Failed to revoke API key");
+      reportError(error, "Failed to delete API key");
     } finally {
       setBusy(false);
     }
@@ -1144,12 +1271,26 @@ function ProjectAgentKeysPage(props: ProjectAgentKeysPageProps): JSX.Element {
       </article>
 
       <article className="panel-card">
-        <h3>Existing Keys</h3>
+        <div className="section-head">
+          <h3>Existing Keys</h3>
+          <button
+            className="button-with-icon"
+            onClick={() => setShowRevokedKeys((current) => !current)}
+            type="button"
+          >
+            <AppIcon name="refresh" />
+            {showRevokedKeys ? "Hide Revoked" : "Show Revoked"}
+          </button>
+        </div>
         {loading && <p className="helper">Loading API keys...</p>}
-        {!loading && keys.length === 0 && <p className="helper">No API keys created yet.</p>}
+        {!loading && visibleKeys.length === 0 && (
+          <p className="helper">
+            {showRevokedKeys ? "No API keys created yet." : "No active API keys. Enable \"Show Revoked\" to review deleted keys."}
+          </p>
+        )}
 
         <div className="row-stack">
-          {keys.map((key) => (
+          {visibleKeys.map((key) => (
             <div className="row-card key-row" key={key.keyId}>
               <div className="key-row-main">
                 <div className="row-title key-row-title">
@@ -1170,11 +1311,11 @@ function ProjectAgentKeysPage(props: ProjectAgentKeysPageProps): JSX.Element {
                   <button
                     className="danger button-with-icon"
                     disabled={busy}
-                    onClick={() => void revokeKey(key)}
+                    onClick={() => void deleteKey(key)}
                     type="button"
                   >
                     <AppIcon name="trash" />
-                    Revoke
+                    Delete
                   </button>
                 )}
               </div>
@@ -3857,6 +3998,7 @@ function AppShell(props: ShellProps): JSX.Element {
   const navItems = [
     { to: "/issues", label: "Issues" },
     { to: "/activity", label: "Activity" },
+    { to: "/agentic-coding", label: "Agent Docs" },
     { to: "/projects", label: "Projects" },
     { to: "/categories", label: "Categories" },
     { to: "/prompts", label: "Prompts" },
@@ -3970,6 +4112,14 @@ function AppShell(props: ShellProps): JSX.Element {
                   reportNotice={reportNotice}
                 />
               }
+            />
+            <Route
+              path="/agentic-coding"
+              element={<AgentDocsPage showBackToSignIn={false} />}
+            />
+            <Route
+              path="/agent-docs"
+              element={<Navigate replace to="/agentic-coding" />}
             />
             <Route
               path="/projects"
@@ -4338,7 +4488,20 @@ export default function App(): JSX.Element {
     );
   }
 
+  const publicPathname = typeof window !== "undefined" ? window.location.pathname : "/";
+  const isPublicAgentDocsPath =
+    publicPathname === "/agentic-coding" || publicPathname === "/agent-docs";
+
   if (!currentUser) {
+    if (isPublicAgentDocsPath) {
+      return (
+        <>
+          <AgentDocsPage showBackToSignIn />
+          <ToastRegion toast={toast} />
+        </>
+      );
+    }
+
     return (
       <>
         <AuthScreen

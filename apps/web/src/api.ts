@@ -204,6 +204,29 @@ export async function getMe(): Promise<AuthUser> {
   return response.user;
 }
 
+export async function getAgentApiDocsMarkdown(): Promise<string> {
+  const response = await fetchApi("/agent/v1/docs.md", {
+    headers: {
+      Accept: "text/markdown"
+    }
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      saveToken(null);
+    }
+
+    const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+    throw new ApiError(
+      response.status,
+      payload?.message || `Request failed (${response.status})`,
+      payload?.issues || []
+    );
+  }
+
+  return response.text();
+}
+
 export async function getProjects(): Promise<Project[]> {
   return request<Project[]>("/projects");
 }

@@ -29,6 +29,7 @@ A mobile-friendly and web-ready app to capture issues/features with screenshots,
 - [Agentic coding guide](./apps/api/docs/agentic-coding.md)
 - [Agent API reference](./apps/api/docs/agent-api-reference.md)
 - [Polling playbook](./apps/api/docs/agent-polling-playbook.md)
+- Public web docs page: `/agentic-coding`
 - API-served markdown docs endpoint: `GET /api/agent/v1/docs.md`
 
 ## Branding assets
