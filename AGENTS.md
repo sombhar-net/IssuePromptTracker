@@ -95,13 +95,6 @@ When making changes, append an entry to **Change Log** below with:
 - Verification performed:
   - `npm run build -w apps/web`
   - `npm run test`
-- 2026-02-24
-- Updated root development startup behavior to fail fast when one service crashes:
-  - changed root `npm run dev` to use `concurrently --kill-others-on-fail`
-  - prevents `apps/web` from staying up alone and surfacing repeated Vite proxy `ECONNREFUSED` errors when `apps/api` fails to boot
-- Migration/env impact: none.
-- Verification performed:
-  - `npm run dev`
 - Added automatic system color-scheme adaptation for web UI:
   - introduced light/dark design tokens in `apps/web/src/styles.css` with `@media (prefers-color-scheme: dark)`
   - updated core surfaces/controls/overlays to use shared color variables so cards, forms, nav, modals, and dropzones switch theme automatically
@@ -297,3 +290,14 @@ When making changes, append an entry to **Change Log** below with:
 - Verification performed:
   - `npm run build -w apps/web`
   - `npm run test`
+- 2026-02-24
+- Hardened local dev startup flow to prevent frontend-only runs when API is down:
+  - root `npm run dev` now starts web through `scripts/dev-web.sh`
+  - `scripts/dev-web.sh` waits for API port readiness before launching Vite and fails with a clear message if API never comes up
+  - root `npm run dev` now uses `concurrently --kill-others-on-fail` so a readiness failure cleanly terminates the API watcher too
+- Migration/env impact:
+  - no DB migration
+  - optional dev-only override: `DEV_API_WAIT_SECONDS` (default 30) for API readiness timeout in `scripts/dev-web.sh`
+- Verification performed:
+  - `npm run dev`
+  - `DATABASE_URL=postgresql://app:app@127.0.0.1:59999/aamtracker?schema=public DEV_API_WAIT_SECONDS=5 npm run dev`
