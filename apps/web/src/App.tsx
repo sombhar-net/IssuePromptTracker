@@ -129,6 +129,10 @@ const DEFAULT_DRAFT: ItemPayload = {
   priority: "medium",
   tags: []
 };
+const DEFAULT_ISSUE_LIST_FILTERS: ItemFilters = {
+  search: "",
+  status: "open"
+};
 
 function titleize(value: string): string {
   return value
@@ -1723,9 +1727,8 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   const [issueActivitiesLoading, setIssueActivitiesLoading] = useState(false);
   const [issueActivitiesLoadingMore, setIssueActivitiesLoadingMore] = useState(false);
   const [activityTypeFilter, setActivityTypeFilter] = useState<ItemActivityType | "">("");
-  const [listFilters, setListFilters] = useState<ItemFilters>({
-    search: ""
-  });
+  const [listFilters, setListFilters] = useState<ItemFilters>(DEFAULT_ISSUE_LIST_FILTERS);
+  const [showListFilters, setShowListFilters] = useState(false);
   const [statusUpdatingItemId, setStatusUpdatingItemId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImagesRef = useRef<PendingImage[]>([]);
@@ -2382,7 +2385,7 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   }
 
   function resetListFilters(): void {
-    setListFilters({ search: "" });
+    setListFilters(DEFAULT_ISSUE_LIST_FILTERS);
   }
 
   if (!selectedProjectId) {
@@ -2404,7 +2407,7 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
   const hasActiveListFilters = Boolean(
     listFilters.search ||
       listFilters.type ||
-      listFilters.status ||
+      (listFilters.status && listFilters.status !== DEFAULT_ISSUE_LIST_FILTERS.status) ||
       listFilters.priority ||
       listFilters.categoryId ||
       listFilters.tag
@@ -2905,128 +2908,135 @@ function IssuesPage(props: IssuesPageProps): JSX.Element {
             <div className="section-head">
               <div>
                 <h3>Current Items</h3>
-                <p className="helper">Filter by status, priority, type, category, tags, or text.</p>
+                <p className="helper">Default view shows open items. Filter by status, priority, type, category, tags, or text.</p>
               </div>
-              <button
-                className="button-with-icon"
-                disabled={!hasActiveListFilters}
-                onClick={resetListFilters}
-                type="button"
-              >
-                <AppIcon name="reset" />
-                Clear Filters
-              </button>
+              <div className="issue-filters-actions">
+                <button className="button-with-icon" onClick={() => setShowListFilters((current) => !current)} type="button">
+                  {showListFilters ? "Hide Filters" : "Show Filters"}
+                </button>
+                <button
+                  className="button-with-icon"
+                  disabled={!hasActiveListFilters}
+                  onClick={resetListFilters}
+                  type="button"
+                >
+                  <AppIcon name="reset" />
+                  Clear Filters
+                </button>
+              </div>
             </div>
 
-            <div className="grid-three issue-filters-grid">
-              <label>
-                Search
-                <input
-                  placeholder="Title or description"
-                  value={listFilters.search || ""}
-                  onChange={(event) =>
-                    setListFilters((current) => ({
-                      ...current,
-                      search: event.target.value
-                    }))
-                  }
-                />
-              </label>
+            {showListFilters && (
+              <div className="grid-three issue-filters-grid">
+                <label>
+                  Search
+                  <input
+                    placeholder="Title or description"
+                    value={listFilters.search || ""}
+                    onChange={(event) =>
+                      setListFilters((current) => ({
+                        ...current,
+                        search: event.target.value
+                      }))
+                    }
+                  />
+                </label>
 
-              <label>
-                Type
-                <select
-                  value={listFilters.type || ""}
-                  onChange={(event) =>
-                    setListFilters((current) => ({
-                      ...current,
-                      type: (event.target.value as ItemType) || undefined
-                    }))
-                  }
-                >
-                  <option value="">Any</option>
-                  {ITEM_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {titleize(type)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <label>
+                  Type
+                  <select
+                    value={listFilters.type || ""}
+                    onChange={(event) =>
+                      setListFilters((current) => ({
+                        ...current,
+                        type: (event.target.value as ItemType) || undefined
+                      }))
+                    }
+                  >
+                    <option value="">Any</option>
+                    {ITEM_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {titleize(type)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label>
-                Status
-                <select
-                  value={listFilters.status || ""}
-                  onChange={(event) =>
-                    setListFilters((current) => ({
-                      ...current,
-                      status: (event.target.value as ItemStatus) || undefined
-                    }))
-                  }
-                >
-                  <option value="">Any</option>
-                  {ITEM_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {titleize(status)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <label>
+                  Status
+                  <select
+                    value={listFilters.status || ""}
+                    onChange={(event) =>
+                      setListFilters((current) => ({
+                        ...current,
+                        status: (event.target.value as ItemStatus) || undefined
+                      }))
+                    }
+                  >
+                    <option value="">Any</option>
+                    {ITEM_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {titleize(status)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label>
-                Priority
-                <select
-                  value={listFilters.priority || ""}
-                  onChange={(event) =>
-                    setListFilters((current) => ({
-                      ...current,
-                      priority: (event.target.value as ItemPriority) || undefined
-                    }))
-                  }
-                >
-                  <option value="">Any</option>
-                  {ITEM_PRIORITIES.map((priority) => (
-                    <option key={priority} value={priority}>
-                      {titleize(priority)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <label>
+                  Priority
+                  <select
+                    value={listFilters.priority || ""}
+                    onChange={(event) =>
+                      setListFilters((current) => ({
+                        ...current,
+                        priority: (event.target.value as ItemPriority) || undefined
+                      }))
+                    }
+                  >
+                    <option value="">Any</option>
+                    {ITEM_PRIORITIES.map((priority) => (
+                      <option key={priority} value={priority}>
+                        {titleize(priority)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label>
-                Category
-                <select
-                  value={listFilters.categoryId || ""}
-                  onChange={(event) =>
-                    setListFilters((current) => ({
-                      ...current,
-                      categoryId: event.target.value || undefined
-                    }))
-                  }
-                >
-                  <option value="">Any</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <label>
+                  Category
+                  <select
+                    value={listFilters.categoryId || ""}
+                    onChange={(event) =>
+                      setListFilters((current) => ({
+                        ...current,
+                        categoryId: event.target.value || undefined
+                      }))
+                    }
+                  >
+                    <option value="">Any</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label>
-                Tag
-                <input
-                  placeholder="Single tag"
-                  value={listFilters.tag || ""}
-                  onChange={(event) =>
-                    setListFilters((current) => ({
-                      ...current,
-                      tag: event.target.value || undefined
-                    }))
-                  }
-                />
-              </label>
-            </div>
+                <label>
+                  Tag
+                  <input
+                    placeholder="Single tag"
+                    value={listFilters.tag || ""}
+                    onChange={(event) =>
+                      setListFilters((current) => ({
+                        ...current,
+                        tag: event.target.value || undefined
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            )}
 
             {loadingItems && <p className="helper">Loading items...</p>}
             {!loadingItems && items.length === 0 && (

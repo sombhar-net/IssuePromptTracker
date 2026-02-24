@@ -439,3 +439,11 @@ When making changes, append an entry to **Change Log** below with:
   - `bash -n skills/aam-issue-tracker-agent/scripts/bootstrap.sh`
   - `rg -n -S -- "-H \"X-AAM-API-Key: \$AAM_API_KEY\"" skills/aam-issue-tracker-agent`
   - `python3 /home/astinaam/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/aam-issue-tracker-agent`
+- 2026-02-24
+- Refined `/issues` list filtering UX for faster triage:
+  - default list filter now loads with `Status = open` so closed work is hidden by default
+  - filter controls are now collapsible via `Show Filters` / `Hide Filters`
+  - `Clear Filters` now resets to the default list filter state (including `Status = open`)
+- Migration/env impact: none.
+- Verification performed:
+  - `npm run build -w apps/web`

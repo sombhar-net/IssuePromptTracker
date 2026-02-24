@@ -982,6 +982,13 @@ button.danger {
   align-items: end;
 }
 
+.issue-filters-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
 .issue-filters-grid label {
   min-width: 0;
 }
