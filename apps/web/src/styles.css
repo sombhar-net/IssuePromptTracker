@@ -305,6 +305,18 @@ button.danger {
   min-width: 0;
 }
 
+.docs-card .section-head {
+  align-items: flex-start;
+}
+
+.docs-card .inline-actions {
+  margin-left: auto;
+}
+
+.docs-card .inline-actions .link-button {
+  min-width: 0;
+}
+
 .docs-card .panel-card {
   overflow: hidden;
 }
@@ -1527,10 +1539,12 @@ button.danger {
 
   .docs-card .inline-actions {
     width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   }
 
   .docs-card .inline-actions .link-button {
-    flex: 1 1 auto;
+    width: 100%;
     justify-content: center;
     text-align: center;
   }
@@ -1636,6 +1650,10 @@ button.danger {
   .docs-card {
     border-radius: 14px;
     padding: 0.65rem;
+  }
+
+  .docs-card .inline-actions {
+    grid-template-columns: 1fr;
   }
 
   .docs-card .panel-card {

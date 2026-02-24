@@ -117,6 +117,7 @@ const ITEM_FORM_FIELDS: ItemFormField[] = [
 ];
 
 const SELECTED_PROJECT_STORAGE_KEY = "aam_selected_project_id";
+const AGENT_SKILL_ZIP_PATH = "/skills/aam-issue-tracker-agent.zip";
 
 const DEFAULT_DRAFT: ItemPayload = {
   projectId: "",
@@ -747,6 +748,14 @@ function AgentDocsPage(props: { showBackToSignIn?: boolean } = {}): JSX.Element 
               <AppIcon name="download" />
               Raw Markdown
             </a>
+            <a
+              className="link-button button-with-icon"
+              href={AGENT_SKILL_ZIP_PATH}
+              download="aam-issue-tracker-agent.zip"
+            >
+              <AppIcon name="download" />
+              Skill ZIP
+            </a>
           </div>
         </header>
 
@@ -764,12 +773,36 @@ function AgentDocsPage(props: { showBackToSignIn?: boolean } = {}): JSX.Element 
         <article className="panel-card">
           <h3>Build an Agent Skill</h3>
           <ol className="docs-list">
-            <li>Define inputs: `project API key`, `poll interval`, and optional `filters`.</li>
+            <li>Download the ready-to-use skill bundle from the `Skill ZIP` button.</li>
+            <li>Define inputs as environment variables: `AAM_API_BASE_URL`, `AAM_API_KEY`, and optional `AAM_PROJECT_ID`.</li>
             <li>Implement idempotent activity handling keyed by immutable `activity.id`.</li>
             <li>Fetch issue details on relevant activity types (`STATUS_CHANGE`, `ITEM_UPDATED`, `IMAGE_*`).</li>
             <li>Execute coding task, then submit `resolve` with concise technical note.</li>
             <li>Persist `nextCursor` only after successful processing of each page.</li>
           </ol>
+        </article>
+
+        <article className="panel-card">
+          <h3>Install and Run the Skill</h3>
+          <pre>{`# 1) Download Skill ZIP from this page and install to Codex skills path
+mkdir -p "$HOME/.codex/skills"
+unzip -o "$HOME/Downloads/aam-issue-tracker-agent.zip" -d "$HOME/.codex/skills"
+
+# 2) Keep one env file per tracker project
+mkdir -p .env.skills
+cat > .env.skills/project-a.env <<'EOF'
+AAM_API_BASE_URL=https://tracker.example.com/api
+AAM_API_KEY=aam_pk_...
+AAM_PROJECT_ID=project_id_here
+AAM_POLL_SECONDS=30
+EOF
+
+# 3) Run each project in its own shell/session
+set -a; source .env.skills/project-a.env; set +a
+"$HOME/.codex/skills/aam-issue-tracker-agent/scripts/bootstrap.sh"`}</pre>
+          <p className="helper">
+            For parallel projects, use separate env files and separate terminal sessions to avoid key/project mix-ups.
+          </p>
         </article>
 
         <article className="panel-card">

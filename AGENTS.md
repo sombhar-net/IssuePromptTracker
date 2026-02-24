@@ -96,6 +96,7 @@ When making changes, append an entry to **Change Log** below with:
   - `npm run build -w apps/web`
   - `npm run test`
 - 2026-02-24
+- 2026-02-24
 - Fixed residual responsiveness issues on `/agentic-coding`:
   - split docs layout into dedicated public vs embedded shells (`docs-page-public` / `docs-page-embedded`) to prevent viewport-width overflow inside authenticated route host
   - changed docs container sizing to parent-relative width (`min(1200px, 100%)`) instead of viewport-relative width
@@ -391,5 +392,21 @@ When making changes, append an entry to **Change Log** below with:
 - Updated README agent docs section with public page path.
 - Migration/env impact: none.
 - Verification performed:
+  - `npm run build -w apps/web`
+  - `npm run test`
+- 2026-02-24
+- Added downloadable agent skill bundle for Issue Prompt Tracker:
+  - created skill at `skills/public/aam-issue-tracker-agent` using the `skill-creator` template
+  - added operational references at `references/api-usage.md`
+  - added executable bootstrap helper at `scripts/bootstrap.sh` for env/auth/scope checks
+- Added public web download surface for the skill bundle:
+  - packaged zip at `apps/web/public/skills/aam-issue-tracker-agent.zip`
+  - added `Skill ZIP` download link on `/agentic-coding`
+- Improved agent docs page mobile responsiveness for action links:
+  - docs action buttons now use responsive grid behavior and single-column stacking on narrow screens
+- Migration/env impact: none.
+- Verification performed:
+  - `python3 /home/astinaam/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/public/aam-issue-tracker-agent`
+  - `unzip -l apps/web/public/skills/aam-issue-tracker-agent.zip`
   - `npm run build -w apps/web`
   - `npm run test`

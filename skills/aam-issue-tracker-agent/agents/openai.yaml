@@ -1,0 +1,4 @@
+interface:
+  display_name: "AAM Issue Tracker Agent"
+  short_description: "Use AAM issue tracker APIs for agent workflows"
+  default_prompt: "Use this skill to interact with the AAM Issue Tracker agent APIs safely and efficiently."

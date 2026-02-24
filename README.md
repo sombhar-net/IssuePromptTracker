@@ -32,6 +32,35 @@ A mobile-friendly and web-ready app to capture issues/features with screenshots,
 - Public web docs page: `/agentic-coding`
 - API-served markdown docs endpoint: `GET /api/agent/v1/docs.md`
 
+## Agent skill bundle
+- Skill source: `skills/aam-issue-tracker-agent`
+- Web-downloadable zip output: `apps/web/public/skills/aam-issue-tracker-agent.zip`
+- Package command:
+```bash
+npm run skills:package -- aam-issue-tracker-agent
+```
+
+Install for Codex:
+```bash
+mkdir -p "$HOME/.codex/skills"
+unzip -o "$HOME/Downloads/aam-issue-tracker-agent.zip" -d "$HOME/.codex/skills"
+```
+
+Parallel project env management:
+```bash
+mkdir -p .env.skills
+cat > .env.skills/project-a.env <<'EOF'
+AAM_API_BASE_URL=https://tracker.example.com/api
+AAM_API_KEY=aam_pk_...
+AAM_PROJECT_ID=project_id_here
+AAM_POLL_SECONDS=30
+EOF
+
+set -a; source .env.skills/project-a.env; set +a
+"$HOME/.codex/skills/aam-issue-tracker-agent/scripts/bootstrap.sh"
+```
+- Use one env file and one shell session per project to isolate API keys and project scope.
+
 ## Branding assets
 - Generated files live in `apps/web/public/branding`.
 - Regenerate icon/logo/screenshot assets:

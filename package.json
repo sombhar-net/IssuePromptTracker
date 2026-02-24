@@ -12,6 +12,7 @@
     "dev": "npm run build -w packages/shared && npm run prisma:generate -w apps/api && concurrently --kill-others-on-fail -n api,web -c blue,green \"npm run dev -w apps/api\" \"./scripts/dev-web.sh\"",
     "build": "npm run build -w packages/shared && npm run build -w apps/api && npm run build -w apps/web",
     "test": "npm run test --workspaces --if-present",
+    "skills:package": "./scripts/package-skill.sh",
     "prisma:generate": "npm run prisma:generate -w apps/api",
     "prisma:migrate:dev": "npm run prisma:migrate:dev -w apps/api",
     "prisma:migrate:deploy": "npm run prisma:migrate:deploy -w apps/api"
